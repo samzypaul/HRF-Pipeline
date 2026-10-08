@@ -14,6 +14,6 @@ Test each piece in the order data flows through it. Record the date, the result 
 | 8 | OSM + Google matching | Hand-check 50 random graded facilities | Agree with grade in ≥ 90 %; Google under cap | | | |
 | 9 | Geocoding missing points | Data quality → Missing coordinates | Every accepted point inside its ward; others flagged low | | | |
 | 10 | Weekly diff | Two weekly runs ≥ 1 day apart | 10 sampled changes all confirmed on the portal | | | Local weekly run 1 h after the pilot: 0 changes (expected), 50 stale details refreshed. Found and fixed a phase bug (numeric cast) |
-| 11 | AI summary | Weekly reports → latest | Number check passes; nothing claimed that isn't in the data | | | Plain summary (no API key) generated and verified locally; Claude path needs ANTHROPIC_API_KEY |
+| 11 | AI summary | Weekly reports → latest | Number check passes; nothing claimed that isn't in the data | | | Plain summary (no API key) generated and verified locally; Gemini path needs GEMINI_API_KEY |
 | 12 | Email + cron | Wait for Monday's run (or trigger the cron route) | Email arrives; run starts within its hour | | | |
 | 13 | Dashboard | Walk through every page | Pages load < 3 s; review decisions survive re-validation | | | |

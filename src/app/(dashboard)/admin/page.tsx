@@ -99,7 +99,7 @@ export default async function AdminPage() {
         <div className="card">
           <h2 className="h2 mb-2">API usage this month</h2>
           <ul className="space-y-1 text-sm">
-            {["google_places", "google_geocode", "overpass", "nominatim", "anthropic"].map((p) => {
+            {["google_places", "google_geocode", "overpass", "nominatim", "gemini"].map((p) => {
               const n = Number(usage.find((u) => u.provider === p)?.calls ?? 0);
               const cap = p === "google_places" ? env.googlePlacesMonthlyCap : p === "google_geocode" ? env.googleGeocodeMonthlyCap : null;
               return (

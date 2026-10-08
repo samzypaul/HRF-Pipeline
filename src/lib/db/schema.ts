@@ -273,7 +273,7 @@ export const weeklyReports = pgTable("weekly_reports", {
 export const apiUsage = pgTable(
   "api_usage",
   {
-    provider: text("provider").notNull(), // google_places | google_geocode | nominatim | overpass | anthropic
+    provider: text("provider").notNull(), // google_places | google_geocode | nominatim | overpass | gemini
     month: text("month").notNull(), // YYYY-MM
     calls: integer("calls").notNull().default(0),
   },

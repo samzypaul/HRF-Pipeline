@@ -15,7 +15,6 @@
     "worker": "tsx scripts/worker.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.132.1",
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.45.4",
     "maplibre-gl": "^4.7.1",

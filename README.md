@@ -26,7 +26,7 @@ Google (fallback) ──────┘         │
 | Job queue | `src/lib/jobs/*` | Tasks stored in Postgres; a "tick" works ~180 s, then starts the next tick |
 | Diff | `src/lib/diff/*` | New / updated / closed / reopened / removed, with field-level changes |
 | Geo-validation | `src/lib/geo/*` | Sanity checks → ward test (PostGIS) → OSM name match → Google fallback → geocoding → grade |
-| AI report | `src/lib/ai/*` | Digest → Claude (structured output) → every number checked against the data → email |
+| AI report | `src/lib/ai/*` | Digest → Gemini (JSON schema output) → every number checked against the data → email |
 | Dashboard | `src/app/(dashboard)/*` | Overview, Map, Data quality review queue, Facility history, Reports, Export, Admin |
 
 ### Run phases
@@ -88,7 +88,7 @@ See `.env.example` for every variable with a comment. The essentials:
 | `AUTH_SECRET`, `ALLOWED_EMAILS`, `RESEND_API_KEY`, `REPORT_FROM` | dashboard sign-in (magic link) |
 | `HFR_CONTACT_EMAIL`, `NOMINATIM_EMAIL` | polite scraping / OSM usage policy |
 | `GOOGLE_MAPS_API_KEY` (optional) | Google fallback; capped by `GOOGLE_MONTHLY_CAP` |
-| `ANTHROPIC_API_KEY` (optional) | AI summary (without it a plain summary is written) |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` (optional) | AI summary via the Gemini API (without a key a plain summary is written) |
 | `REPORT_RECIPIENTS` | weekly email |
 
 Generate secrets with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.

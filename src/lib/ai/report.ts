@@ -1,10 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 import { env } from "../env";
 import { countCall } from "../geo/usage";
 import { sendReportEmail } from "../notify/email";
 import { verifyNumbers } from "./verify";
+import { geminiJson, type GeminiSchema } from "./gemini";
 
 export interface Digest {
   run: { id: number; kind: string; started_at: string; finished_at: string | null };
@@ -129,41 +129,37 @@ export async function buildDigest(runId: number): Promise<Digest> {
   };
 }
 
-const REPORT_TOOL = {
-  name: "weekly_report",
-  description: "Return the weekly health facility registry report.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      summary_md: {
-        type: "string",
-        description:
-          "Markdown summary for Ministry of Health and partner staff: 2–4 short sections (What changed, Data quality, Needs attention). Plain language, no more than 350 words.",
-      },
-      anomalies: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            detail: { type: "string" },
-            facility_codes: { type: "array", items: { type: "string" } },
-          },
-          required: ["title", "detail"],
+const REPORT_SCHEMA: GeminiSchema = {
+  type: "OBJECT",
+  properties: {
+    summary_md: {
+      type: "STRING",
+      description:
+        "Markdown summary for Ministry of Health and partner staff: 2–4 short sections (What changed, Data quality, Needs attention). Plain language, no more than 350 words.",
+    },
+    anomalies: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING" },
+          detail: { type: "STRING" },
+          facility_codes: { type: "ARRAY", items: { type: "STRING" } },
         },
-      },
-      review_list: {
-        type: "array",
-        description: "Facilities a person should check, most important first (max 15).",
-        items: {
-          type: "object",
-          properties: { facility_code: { type: "string" }, reason: { type: "string" } },
-          required: ["facility_code", "reason"],
-        },
+        required: ["title", "detail"],
       },
     },
-    required: ["summary_md", "anomalies", "review_list"],
+    review_list: {
+      type: "ARRAY",
+      description: "Facilities a person should check, most important first (max 15).",
+      items: {
+        type: "OBJECT",
+        properties: { facility_code: { type: "STRING" }, reason: { type: "STRING" } },
+        required: ["facility_code", "reason"],
+      },
+    },
   },
+  required: ["summary_md", "anomalies", "review_list"],
 };
 
 const SYSTEM = `You write the weekly data-quality report for Tanzania's Health Facility Registry (HFR) pipeline.
@@ -181,24 +177,17 @@ export async function generateWeeklyReport(runId: number) {
   let reviewList: unknown[] = [];
   let model: string | null = null;
 
-  if (env.anthropicKey) {
-    const client = new Anthropic({ apiKey: env.anthropicKey });
-    model = env.anthropicModel;
-    const msg = await client.messages.create({
-      model,
-      max_tokens: 2000,
+  if (env.geminiKey) {
+    const { data, model: used } = await geminiJson<{ summary_md: string; anomalies: unknown[]; review_list: unknown[] }>({
       system: SYSTEM,
-      tools: [REPORT_TOOL],
-      tool_choice: { type: "tool", name: REPORT_TOOL.name },
-      messages: [{ role: "user", content: `Digest for run ${runId}:\n\n${JSON.stringify(digest, null, 2)}` }],
+      prompt: `Digest for run ${runId}:\n\n${JSON.stringify(digest, null, 2)}`,
+      schema: REPORT_SCHEMA,
     });
-    await countCall("anthropic");
-    const block = msg.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") throw new Error("Claude did not return a report");
-    const input = block.input as { summary_md: string; anomalies: unknown[]; review_list: unknown[] };
-    summary = input.summary_md;
-    anomalies = input.anomalies ?? [];
-    reviewList = input.review_list ?? [];
+    await countCall("gemini");
+    model = used;
+    summary = data.summary_md ?? "";
+    anomalies = Array.isArray(data.anomalies) ? data.anomalies : [];
+    reviewList = Array.isArray(data.review_list) ? data.review_list : [];
   } else {
     summary = fallbackSummary(digest);
   }
@@ -222,7 +211,7 @@ export async function generateWeeklyReport(runId: number) {
   return { verification };
 }
 
-/** Plain summary used when no Claude API key is configured. */
+/** Plain summary used when no Gemini API key is configured. */
 export function fallbackSummary(d: Digest): string {
   const c = d.changes;
   return [

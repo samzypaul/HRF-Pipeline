@@ -41,7 +41,7 @@ export default async function ReportPage({ params }: { params: Promise<{ runId: 
         </form>
       </PageHeader>
       <p className="text-xs text-muted">
-        Written {fmtDate(r.created_at)} {r.model ? `by ${r.model}` : "(no AI key: plain summary)"} · {r.emailed_at ? `emailed ${fmtDate(r.emailed_at)}` : "not emailed"}
+        Written {fmtDate(r.created_at)} {r.model ? `by ${r.model}` : "(no Gemini key: plain summary)"} · {r.emailed_at ? `emailed ${fmtDate(r.emailed_at)}` : "not emailed"}
       </p>
       {!r.verified && (
         <div className="card border-low/40 bg-low/5 text-sm">

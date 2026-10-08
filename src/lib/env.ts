@@ -87,11 +87,11 @@ export const env = {
   },
 
   // AI + email
-  get anthropicKey() {
-    return read("ANTHROPIC_API_KEY");
+  get geminiKey() {
+    return read("GEMINI_API_KEY");
   },
-  get anthropicModel() {
-    return read("ANTHROPIC_MODEL") ?? "claude-sonnet-4-5";
+  get geminiModel() {
+    return read("GEMINI_MODEL") ?? "gemini-3.8-flash";
   },
   get resendKey() {
     return read("RESEND_API_KEY");
