@@ -1,0 +1,77 @@
+<link href="/web/assets/a5e62138/css/bootstrap.css" rel="stylesheet">
+<link href="/web/assets/c7d0acda/css/kv-grid.min.css" rel="stylesheet">
+<link href="/web/assets/3ac7f564/css/bootstrap-dialog-bs4.min.css" rel="stylesheet">
+<link href="/web/assets/c7d0acda/css/jquery.resizableColumns.min.css" rel="stylesheet">
+<script src="/web/assets/3ac7f564/js/dialog.min.js"></script>
+<script>var krajeeDialogDefaults_0269f7ad = {"alert":{"type":"type-info","title":"Information","buttonLabel":"<span class=\"fas fa-check\"></span> Ok"},"confirm":{"type":"type-warning","title":"Confirmation","btnOKClass":"btn-warning","btnOKLabel":"<span class=\"fas fa-check\"></span> Ok","btnCancelLabel":"<span class=\"fas fa-ban\"></span>  Cancel"},"prompt":{"draggable":false,"title":"Information","buttons":[{"label":"Cancel","icon":"fas fa-ban","cssClass":"btn-outline-secondary"},{"label":"Ok","icon":"fas fa-check","cssClass":"btn-primary"}],"closable":false},"dialog":{"draggable":true,"title":"Information","buttons":[{"label":"Cancel","icon":"fas fa-ban","cssClass":"btn-outline-secondary"},{"label":"Ok","icon":"fas fa-check","cssClass":"btn-primary"}]}};
+var krajeeDialog_6d7f2d25 = {"id":"w2"};
+var krajeeDialog=new KrajeeDialog(true,krajeeDialog_6d7f2d25,krajeeDialogDefaults_0269f7ad);</script><div class="col-lg-12">
+
+    <div class="card overflow-hidden">
+        <div class="card-header">
+            <h3 class="card-title text-black">List of Health Facility</h3>
+
+        </div>
+        <div class="card-body">
+            &nbsp;&nbsp;&nbsp;
+
+<div class="dataView" style='overflow-x:scroll;'>
+                        <div class="pull-right">
+                <script>
+    function viewinmapclick(){
+            $('#w0').submit();            
+    }
+</script>
+<form id="w0" action="/web/index.php?r=portal%2Fview-inmap" method="post" enctype="multipart/form-data"><div class="form-group field-conditionId">
+
+<input type="hidden" id="conditionId" class="form-control" name="FacilityMap[conditionviewmap]" value="18509,2140,2150,25332,2143" readOnly="readOnly">
+
+<div class="help-block"></div>
+</div><div class="form-group field-titleId">
+
+<input type="hidden" id="titleId" class="form-control" name="FacilityMap[title]" value=" Health Facility" readOnly="readOnly">
+
+<div class="help-block"></div>
+</div>
+<button type="submit" class="btn btn-info" onclick="viewinmapclick()">View in Map</button></form>                <br/>
+            </div>
+                <div id="p0" data-pjax-container="" data-pjax-push-state data-pjax-timeout="1000">    <div id="w1" class="grid-view is-bs4 kv-grid-bs4 hide-resize" data-krajee-grid="kvGridInit_ec8962f8" data-krajee-ps="ps_w1_container"><div class="summary">Showing <b>1-5</b> of <b>5</b> items.</div>
+<div id="w1-container" class="kv-grid-container"><table class="kv-grid-table table table-bordered table-striped kv-table-wrap"><thead class="kv-table-header w1">
+<tr><th>#</th><th data-col-seq="1"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=facility_identifier_number" data-sort="facility_identifier_number">Facility Code</a></th><th data-col-seq="2"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=facility_name" data-sort="facility_name">Facility Name</a></th><th data-col-seq="3"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=facility_type" data-sort="facility_type">Facility Type</a></th><th data-col-seq="4"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=facility_type" data-sort="facility_type">Region</a></th><th data-col-seq="5"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=facility_type" data-sort="facility_type">Council</a></th><th data-col-seq="6"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=ownership_category" data-sort="ownership_category">Ownership Category</a></th><th data-col-seq="7"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=ownership_authority" data-sort="ownership_authority">Ownership Authority</a></th><th data-col-seq="8"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=moh_authority" data-sort="moh_authority">Moh Authority</a></th><th data-col-seq="9"><a href="/web/index.php?r=portal%2Fhealth-facility-list&amp;search_by=fac_name&amp;facility_name=&amp;ward%5B0%5D=TZ.CL.DO.BA.6.7&amp;sort=operating_status" data-sort="operating_status">Operating Status</a></th><th data-col-seq="10">ACTION</th><th data-col-seq="11"> </th></tr>
+</thead>
+<tbody>
+<tr class="w1" data-key="18509"><td>1</td><td class="w1" data-col-seq="1">121410-5</td><td class="w1" data-col-seq="2">UHELELA</td><td class="w1" data-col-seq="3">Dispensary</td><td class="w1" data-col-seq="4">Dodoma Region</td><td class="w1" data-col-seq="5">Bahi DC</td><td class="w1" data-col-seq="6">Public</td><td class="w1" data-col-seq="7">LGA</td><td class="w1" data-col-seq="8">DCS</td><td class="w1" data-col-seq="9">Operating</td><td class="w1" data-col-seq="10"><button type="button" class="btn btn-outline-info" value="/web/index.php?r=portal%2Ffacility-detail&amp;facility_code=121410-5" data-pjax="0" onclick="loadView(this)"><i class="glyphicon glyphicon-eye-open"></i> </button></td><td class="w1" data-col-seq="11"><a class="btn btn-outline-secondary" href="/web/index.php?r=portal%2Fpdf-facility-detail&amp;facility_code=121410-5" data-pjax="0" target="_blank"><i class="fa fa-file-pdf-o"></i></a></td></tr>
+<tr class="w1" data-key="2140"><td>2</td><td class="w1" data-col-seq="1">100227-8</td><td class="w1" data-col-seq="2">Bahi</td><td class="w1" data-col-seq="3">Health Center</td><td class="w1" data-col-seq="4">Dodoma Region</td><td class="w1" data-col-seq="5">Bahi DC</td><td class="w1" data-col-seq="6">Public</td><td class="w1" data-col-seq="7">LGA</td><td class="w1" data-col-seq="8">DCS</td><td class="w1" data-col-seq="9">Operating</td><td class="w1" data-col-seq="10"><button type="button" class="btn btn-outline-info" value="/web/index.php?r=portal%2Ffacility-detail&amp;facility_code=100227-8" data-pjax="0" onclick="loadView(this)"><i class="glyphicon glyphicon-eye-open"></i> </button></td><td class="w1" data-col-seq="11"><a class="btn btn-outline-secondary" href="/web/index.php?r=portal%2Fpdf-facility-detail&amp;facility_code=100227-8" data-pjax="0" target="_blank"><i class="fa fa-file-pdf-o"></i></a></td></tr>
+<tr class="w1" data-key="2150"><td>3</td><td class="w1" data-col-seq="1">100229-4</td><td class="w1" data-col-seq="2">BAHI RC</td><td class="w1" data-col-seq="3">Dispensary</td><td class="w1" data-col-seq="4">Dodoma Region</td><td class="w1" data-col-seq="5">Bahi DC</td><td class="w1" data-col-seq="6">Private</td><td class="w1" data-col-seq="7">Faith Based Organization (FBO)</td><td class="w1" data-col-seq="8">PHAB</td><td class="w1" data-col-seq="9">Operating</td><td class="w1" data-col-seq="10"><button type="button" class="btn btn-outline-info" value="/web/index.php?r=portal%2Ffacility-detail&amp;facility_code=100229-4" data-pjax="0" onclick="loadView(this)"><i class="glyphicon glyphicon-eye-open"></i> </button></td><td class="w1" data-col-seq="11"><a class="btn btn-outline-secondary" href="/web/index.php?r=portal%2Fpdf-facility-detail&amp;facility_code=100229-4" data-pjax="0" target="_blank"><i class="fa fa-file-pdf-o"></i></a></td></tr>
+<tr class="w1" data-key="25332"><td>4</td><td class="w1" data-col-seq="1">123908-6</td><td class="w1" data-col-seq="2">NAGULO BAHI</td><td class="w1" data-col-seq="3">Dispensary</td><td class="w1" data-col-seq="4">Dodoma Region</td><td class="w1" data-col-seq="5">Bahi DC</td><td class="w1" data-col-seq="6">Public</td><td class="w1" data-col-seq="7">LGA</td><td class="w1" data-col-seq="8">DCS</td><td class="w1" data-col-seq="9">Operating</td><td class="w1" data-col-seq="10"><button type="button" class="btn btn-outline-info" value="/web/index.php?r=portal%2Ffacility-detail&amp;facility_code=123908-6" data-pjax="0" onclick="loadView(this)"><i class="glyphicon glyphicon-eye-open"></i> </button></td><td class="w1" data-col-seq="11"><a class="btn btn-outline-secondary" href="/web/index.php?r=portal%2Fpdf-facility-detail&amp;facility_code=123908-6" data-pjax="0" target="_blank"><i class="fa fa-file-pdf-o"></i></a></td></tr>
+<tr class="w1" data-key="2143"><td>5</td><td class="w1" data-col-seq="1">113978-1</td><td class="w1" data-col-seq="2">Bahi</td><td class="w1" data-col-seq="3">District Hospital</td><td class="w1" data-col-seq="4">Dodoma Region</td><td class="w1" data-col-seq="5">Bahi DC</td><td class="w1" data-col-seq="6">Public</td><td class="w1" data-col-seq="7">LGA</td><td class="w1" data-col-seq="8">DCS</td><td class="w1" data-col-seq="9">Operating</td><td class="w1" data-col-seq="10"><button type="button" class="btn btn-outline-info" value="/web/index.php?r=portal%2Ffacility-detail&amp;facility_code=113978-1" data-pjax="0" onclick="loadView(this)"><i class="glyphicon glyphicon-eye-open"></i> </button></td><td class="w1" data-col-seq="11"><a class="btn btn-outline-secondary" href="/web/index.php?r=portal%2Fpdf-facility-detail&amp;facility_code=113978-1" data-pjax="0" target="_blank"><i class="fa fa-file-pdf-o"></i></a></td></tr>
+</tbody></table></div>
+</div></div></div>        </div>
+    </div>
+</div><script src="/web/assets/9b6747c3/jquery.js"></script>
+<script src="/web/assets/df4790bc/yii.js"></script>
+<script src="/web/assets/df4790bc/yii.activeForm.js"></script>
+<script src="/web/assets/df4790bc/yii.gridView.js"></script>
+<script src="/web/assets/a5e62138/js/bootstrap.bundle.js"></script>
+<script src="/web/assets/3ac7f564/js/bootstrap-dialog.min.js"></script>
+<script src="/web/assets/3ac7f564/js/dialog-yii.min.js"></script>
+<script src="/web/assets/c7d0acda/js/kv-grid-export.min.js"></script>
+<script src="/web/assets/c7d0acda/js/jquery.resizableColumns.min.js"></script>
+<script src="/web/assets/768d050b/jquery.pjax.js"></script>
+<script>jQuery('#w0').yiiActiveForm([], []);
+krajeeYiiConfirm('krajeeDialog');
+var kvGridExp_356c3a34={"gridId":"w1","action":"/web/index.php?r=gridview%2Fexport%2Fdownload","module":"gridview","encoding":"utf-8","bom":1,"target":"_blank","messages":{"allowPopups":"Disable any popup blockers in your browser to ensure proper download.","confirmDownload":"Ok to proceed?","downloadProgress":"Generating the export file. Please wait...","downloadComplete":"Request submitted! You may safely close this dialog after saving your downloaded file."},"exportConversions":[{"from":"<span class=\"glyphicon glyphicon-ok-sign text-success\" style=\"font-weight:bold\"></span>","to":"Active"},{"from":"<span class=\"glyphicon glyphicon-remove-sign text-danger\" style=\"font-weight:bold\"></span>","to":"Inactive"}],"skipExportElements":[".sr-only",".hide"],"showConfirmAlert":true};
+var kvGridExp_12735912={"filename":"grid-export","showHeader":true,"showPageSummary":true,"showFooter":true};
+var kvGridExp_0cd0c341={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The HTML export file will be generated for download.","config":{"cssFile":["https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css","https://use.fontawesome.com/releases/v5.3.1/css/all.css"]}};
+var kvGridExp_654ea9e4={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The CSV export file will be generated for download.","config":{"colDelimiter":",","rowDelimiter":"\r\n"}};
+var kvGridExp_2dc6c42a={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The TEXT export file will be generated for download.","config":{"colDelimiter":"\t","rowDelimiter":"\r\n"}};
+var kvGridExp_6d8992b4={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The EXCEL export file will be generated for download.","config":{"worksheet":"ExportWorksheet","cssFile":""}};
+var kvGridExp_bee8ca39={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The PDF export file will be generated for download.","config":{"mode":"UTF-8","format":"A4-L","destination":"D","marginTop":20,"marginBottom":20,"cssInline":".kv-wrap{padding:20px}","methods":{"SetHeader":[{"odd":{"L":{"content":"Yii2 Grid Export (PDF)","font-size":8,"color":"#333333"},"C":{"content":"Grid Export","font-size":16,"color":"#333333"},"R":{"content":"Generated: Thu, 08-Oct-2026","font-size":8,"color":"#333333"}},"even":{"L":{"content":"Yii2 Grid Export (PDF)","font-size":8,"color":"#333333"},"C":{"content":"Grid Export","font-size":16,"color":"#333333"},"R":{"content":"Generated: Thu, 08-Oct-2026","font-size":8,"color":"#333333"}}}],"SetFooter":[{"odd":{"L":{"content":"© Krajee Yii2 Extensions","font-size":8,"font-style":"B","color":"#999999"},"R":{"content":"[ {PAGENO} ]","font-size":10,"font-style":"B","font-family":"serif","color":"#333333"},"line":true},"even":{"L":{"content":"© Krajee Yii2 Extensions","font-size":8,"font-style":"B","color":"#999999"},"R":{"content":"[ {PAGENO} ]","font-size":10,"font-style":"B","font-family":"serif","color":"#333333"},"line":true}}]},"options":{"title":"Grid Export","subject":"PDF export generated by kartik-v/yii2-grid extension","keywords":"krajee, grid, export, yii2-grid, pdf"},"contentBefore":"","contentAfter":""}};
+var kvGridExp_fc243a8c={"dialogLib":"krajeeDialog","gridOpts":kvGridExp_356c3a34,"genOpts":kvGridExp_12735912,"alertMsg":"The JSON export file will be generated for download.","config":{"colHeads":[],"slugColHeads":false,"jsonReplacer":function(k,v){return typeof(v)==='string'?$.trim(v):v},"indentSpace":4}};
+var kvGridInit_ec8962f8=function(){
+jQuery('#w1 .export-html').gridexport(kvGridExp_0cd0c341);jQuery('#w1 .export-csv').gridexport(kvGridExp_654ea9e4);jQuery('#w1 .export-txt').gridexport(kvGridExp_2dc6c42a);jQuery('#w1 .export-xls').gridexport(kvGridExp_6d8992b4);jQuery('#w1 .export-pdf').gridexport(kvGridExp_bee8ca39);jQuery('#w1 .export-json').gridexport(kvGridExp_fc243a8c);jQuery('#w1-container').resizableColumns('destroy').resizableColumns({"store":null,"resizeFromBody":false});
+};
+kvGridInit_ec8962f8();
+jQuery('#w1').yiiGridView({"filterUrl":"\/web\/index.php?r=portal%2Fhealth-facility-list\u0026search_by=fac_name\u0026facility_name=\u0026ward%5B%5D=TZ.CL.DO.BA.6.7","filterSelector":"#w1-filters input, #w1-filters select","filterOnFocusOut":true});
+jQuery(document).pjax("#p0 a", {"push":true,"replace":false,"timeout":1000,"scrollTo":false,"container":"#p0"});
+jQuery(document).off("submit", "#p0 form[data-pjax]").on("submit", "#p0 form[data-pjax]", function (event) {jQuery.pjax.submit(event, {"push":true,"replace":false,"timeout":1000,"scrollTo":false,"container":"#p0"});});</script>

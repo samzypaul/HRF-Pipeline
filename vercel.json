@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
+  "crons": [
+    { "path": "/api/cron/weekly", "schedule": "0 23 * * 0" },
+    { "path": "/api/cron/watchdog", "schedule": "0 4 * * *" }
+  ],
+  "functions": {
+    "src/app/api/jobs/tick/route.ts": { "maxDuration": 300 }
+  }
+}

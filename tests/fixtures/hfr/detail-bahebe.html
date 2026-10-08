@@ -1,0 +1,257 @@
+<script>
+    $("document").ready(function () {
+        setTimeout(function () {
+            $("#service").trigger('click');
+        }, 1000);
+    });
+
+    function loadView2(data) {
+        var url = data.value;
+        var medium_spinner = '<div style="font-size: 18px;"><span class="fa fa-spinner fa-2x fa-spin"></span> Please Wait ...</div>';
+        $('#tab-7').html(medium_spinner);
+        $.ajax({
+            type: 'get',
+            url: url,
+            success: function (data) {
+                $('#tab-7').show();
+                $('#tab-7').html(data);
+                return false
+            }
+        });
+        return false;
+    }
+</script>
+<br/>
+<div class="card overflow-hidden">
+    <div class="card-header">
+        <div class="col-lg-8 col-xl-10">
+            <h3 class="card-title text-black" style="font-size:12px;"> Facility Details</h3>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row no-gutters">
+            <div class="col-lg-8 col-xl-12">
+                <div class="">
+                    <div class="main-content-body main-content-body-contacts">
+                        <div class="main-contact-info-header">
+                            <div class="media">
+                                <div class="media-body">
+                                    <h4>Facility Name: BAHEBE HEALTH LABORATORY</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="main-contact-info-body">
+                            <div class="media-list pt-0">
+                                <div class="media py-4 mt-0">
+                                    <div class="media-body">
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-navicon"></i>
+                                            </div>
+                                            <div>
+                                                <label>Common name</label> <span
+                                                        class="font-weight-semibold fs-14">BAHEBE HEALTH LABORATORY</span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                                                                    <i class="fa fa-check-circle text-success"></i>
+                                                                                            </div>
+                                            <div>
+                                                <label>Status</label> <span
+                                                        class="font-weight-semibold fs-14">Operating</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-hashtag"></i>
+                                            </div>
+                                            <div>
+                                                <label>Facility Code</label> <span
+                                                        class="font-weight-semibold fs-14">122023-5</span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-calendar"></i>
+                                            </div>
+                                            <div>
+                                                <label>Date Opened</label> <span
+                                                        class="font-weight-semibold fs-14">2022-12-07</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-hospital-o"></i>
+                                            </div>
+                                            <div>
+                                                <label>Facility Type</label> <span
+                                                        class="font-weight-semibold fs-14">Level IA2 (Dispensary Laboratory)</span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-users"></i>
+                                            </div>
+                                            <div>
+                                                <label>Ownership</label> <span
+                                                        class="font-weight-semibold fs-14">Private, For Profit : Example Owner </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-map-marker"></i>
+                                            </div>
+                                            <div>
+                                                <label>Address</label> <span
+                                                        class="font-weight-semibold fs-14">Lake Zone-Geita Region - Chato District - Chato DC - Nyamirembe - Nyamirembe</span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-phone"></i>
+                                            </div>
+                                            <div>
+                                                <label>Official Phone</label> <span
+                                                        class="font-weight-semibold fs-14">0700000000</span>
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-globe"></i>
+                                            </div>
+                                            <div>
+                                                <label>Website</label> <span
+                                                        class="font-weight-semibold fs-14"> </span>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-user"></i>
+                                            </div>
+                                            <div>
+                                                <label>In-charge Qualification</label> <span
+                                                        class="font-weight-semibold fs-14"></span>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-hashtag"></i>
+                                            </div>
+                                            <div>
+                                                <label>CTC ID</label> <span
+                                                        class="font-weight-semibold fs-14"></span>
+                                            </div>
+
+                                        </div>
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-map-marker"></i>
+                                            </div>
+                                            <div>
+                                                <label>Nearest Facility</label> <span
+                                                        class="font-weight-semibold fs-14">106709-9 - NYAMBITI Dispensary </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="media py-4 border-top mt-0">
+                                    <div class="media-body">
+
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-hashtag"></i>
+                                            </div>
+                                            <div>
+                                                <label>MSD ID</label> <span
+                                                        class="font-weight-semibold fs-14"> </span>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex">
+                                            <div class="media-icon bg-light text-primary mr-3 mt-1">
+                                                <i class="fa fa-hashtag"></i>
+                                            </div>
+                                            <div>
+                                                <label>MTUHA ID</label> <span
+                                                        class="font-weight-semibold fs-14"></span>
+                                            </div>
+
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="profile-cover">
+                <div class="wideget-user-tab">
+                    <div class="tab-menu-heading p-0">
+                        <div class="tabs-menu1 px-3">
+                            <div class="btn-group">
+                                <button type="button" id="service" class="btn btn-lg" value="/web/index.php?r=portal%2Ffacility-service&amp;id=183" onclick="loadView2(this)">Service</button>                                <script>
+    function viewinmapclick(){
+            $('#w0').submit();            
+    }
+</script>
+<form id="w0" action="/web/index.php?r=portal%2Fview-inmap" method="post" enctype="multipart/form-data"><div class="form-group field-conditionId">
+
+<input type="hidden" id="conditionId" class="form-control" name="FacilityMap[conditionviewmap]" value="183" readOnly="readOnly">
+
+<div class="help-block"></div>
+</div><div class="form-group field-titleId">
+
+<input type="hidden" id="titleId" class="form-control" name="FacilityMap[title]" value="BAHEBE HEALTH LABORATORY
+                                &lt;button type=&quot;button&quot; class=&quot;btn btn-info&quot; value=&quot;/web/index.php?r=portal%2Ffacility-detail&amp;amp;facility_code=122023-5&quot; onclick=&quot;facilityDetail(this)&quot;&gt;Back to Facility Details&lt;/button&gt;" readOnly="readOnly">
+
+<div class="help-block"></div>
+</div>
+<button type="submit" class="btn btn-info" onclick="viewinmapclick()">View in Map</button></form>                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div><!-- /.profile-cover -->
+        </div>
+        <div class="row">
+            <div class="col-xl-12 col-lg-12 col-md-12">
+                <div class="border-0">
+                    <div class="tab-content">
+                        <div class="tab-pane active" id="tab-7">
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> <!-- card -->
+<script src="/web/assets/9b6747c3/jquery.js"></script>
+<script src="/web/assets/df4790bc/yii.js"></script>
+<script src="/web/assets/df4790bc/yii.activeForm.js"></script>
+<script>jQuery('#w0').yiiActiveForm([], []);</script>
