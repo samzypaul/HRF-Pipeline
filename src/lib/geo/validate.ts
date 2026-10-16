@@ -7,10 +7,16 @@ import { nameScore, MATCH_SCORE, SEARCH_RADIUS_M } from "./name-match";
 import { overpassHealthPlaces, nominatimSearch, type BBox, type Place } from "./osm";
 import { googleTextSearch, googleGeocode, GoogleUnavailable } from "./google";
 import { grade, type CandidatePoint } from "./grade";
+import { wardNameCheck, type WardNameCheck } from "./maptiler";
+import { forwardSearch, isUnavailable, resolveProvider, reverseNames } from "./provider";
+import { getSettings } from "../settings";
+import { councilPolygon, pointInCouncilPolygon } from "./council";
+import { checkVillage, hasVillageBoundaries, type VillageResult } from "./village";
 
 interface FacilityRow {
   facility_code: string;
   name: string;
+  village_name: string | null;
   common_name: string | null;
   ward_code: string | null;
   ward_name: string | null;
@@ -65,7 +71,7 @@ async function pointInCouncil(councilCode: string, lat: number, lng: number): Pr
 }
 
 /** Bounding box used to search OSM for a council: its ward polygons, else its facility points. */
-async function councilBBox(councilCode: string | null, regionCode: string | null): Promise<BBox | null> {
+async function councilBBox(councilCode: string | null, regionCode: string | null, polygonBox: BBox | null = null): Promise<BBox | null> {
   if (councilCode) {
     const [b] = await q<{ s: number | null; w: number; n: number; e: number }>(sql`
       SELECT ST_YMin(ext) s, ST_XMin(ext) w, ST_YMax(ext) n, ST_XMax(ext) e FROM (
@@ -75,6 +81,7 @@ async function councilBBox(councilCode: string | null, regionCode: string | null
         WHERE au.parent_code = ${councilCode} AND au.level = 4) x`);
     if (b && b.s != null) return pad({ south: b.s, west: b.w, north: b.n, east: b.e }, 0.02);
   }
+  if (polygonBox) return pad(polygonBox, 0.02);
   // Fall back to the 5th–95th percentile of the council's (or region's) facility points.
   const [p] = await q<{ s: number | null; w: number; n: number; e: number }>(sql`
     SELECT percentile_cont(0.05) WITHIN GROUP (ORDER BY hfr_lat) s,
@@ -102,14 +109,14 @@ function boxAround(lat: number, lng: number, metres: number): BBox {
 const overpassFailures = new Map<string, number>();
 
 /** OSM health places for a council, cached for 30 days. */
-async function osmPlacesFor(councilCode: string | null, regionCode: string | null): Promise<Place[]> {
+async function osmPlacesFor(councilCode: string | null, regionCode: string | null, polygonBox: BBox | null = null): Promise<Place[]> {
   const key = councilCode ? `council:${councilCode}` : `region:${regionCode}`;
   const [cached] = await q<{ data: Place[]; fresh: boolean }>(sql`
     SELECT data, fetched_at > now() - make_interval(days => ${OSM_CACHE_DAYS}) AS fresh FROM osm_cache WHERE key = ${key}`);
   if (cached?.fresh) return cached.data;
   const failedAt = overpassFailures.get(key);
   if (failedAt && Date.now() - failedAt < 15 * 60_000) return cached?.data ?? [];
-  const bbox = await councilBBox(councilCode, regionCode);
+  const bbox = await councilBBox(councilCode, regionCode, polygonBox);
   if (!bbox) return [];
   try {
     const places = await overpassHealthPlaces(bbox);
@@ -154,7 +161,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
   const stats: ValidateStats = { validated: 0, googlePlaces: 0, geocoded: 0, errors: 0 };
   if (codes.length === 0) return stats;
   const rows = await q<FacilityRow>(sql`
-    SELECT f.facility_code, f.name, f.common_name, f.ward_code, f.ward_name, f.council_code, f.council_name,
+    SELECT f.facility_code, f.name, f.village_name, f.common_name, f.ward_code, f.ward_name, f.council_code, f.council_name,
            f.region_code, f.region_name, f.hfr_lat, f.hfr_lng, cw.boundary_id
     FROM facilities f LEFT JOIN ward_crosswalk cw ON cw.ward_code = f.ward_code
     WHERE f.facility_code IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})`);
@@ -169,16 +176,32 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
 
   const previous = new Map(
     (
-      await q<{ facility_code: string; google_place_id: string | null; name_score: number | null; match_distance_m: number | null; google_recent: boolean }>(sql`
+      await q<{
+        facility_code: string;
+        google_place_id: string | null;
+        name_score: number | null;
+        match_distance_m: number | null;
+        google_recent: boolean;
+        ward_check: WardNameCheck | null;
+        ward_check_lat: number | null;
+        ward_check_lng: number | null;
+        ward_check_recent: boolean;
+      }>(sql`
         SELECT facility_code, google_place_id, name_score, match_distance_m,
-               coalesce(google_checked_at > now() - interval '180 days', false) AS google_recent
+               coalesce(google_checked_at > now() - interval '180 days', false) AS google_recent,
+               ward_name_check AS ward_check, ward_check_lat, ward_check_lng,
+               coalesce(ward_checked_at > now() - interval '180 days', false) AS ward_check_recent
         FROM geo_validation WHERE facility_code IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})`)
     ).map((r) => [r.facility_code, r]),
   );
 
+  const { geoLayers: layers, geoProvider } = await getSettings();
   const wardCache = new Map<number, WardGeo>();
   const placesCache = new Map<string, Place[]>();
   let googleAvailable = !!env.googleKey;
+  const provider = layers.extraGeocoder ? resolveProvider(geoProvider) : null;
+  let extraAvailable = provider != null;
+  const villagesLoaded = await hasVillageBoundaries();
 
   for (const f of rows) {
     try {
@@ -202,12 +225,17 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         distanceToWardM = r.strictlyInside ? 0 : Math.round(r.distanceM);
       }
       if (hfrPoint && f.council_code) inCouncil = await pointInCouncil(f.council_code, hfrPoint.lat, hfrPoint.lng);
+      // The council polygon covers councils whose wards are not linked yet.
+      const council = await councilPolygon(f.council_name, f.region_name);
+      if (hfrPoint && inCouncil === null && council) inCouncil = await pointInCouncilPolygon(council.id, hfrPoint.lat, hfrPoint.lng);
+      /** True only when a council polygon exists and the candidate point is clearly outside it. */
+      const outsideCouncil = async (lat: number, lng: number) => (council ? !(await pointInCouncilPolygon(council.id, lat, lng)) : false);
 
       // 2. OSM name match (free)
       const placesKey = f.council_code ?? `r:${f.region_code}`;
       let places = placesCache.get(placesKey);
       if (!places) {
-        places = await osmPlacesFor(f.council_code, f.region_code);
+        places = layers.osm ? await osmPlacesFor(f.council_code, f.region_code, council?.bbox ?? null) : [];
         placesCache.set(placesKey, places);
       }
       let nearMatch: { source: "osm" | "google"; score: number; distanceM: number } | null = null;
@@ -250,7 +278,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       // 3. Google fallback (only when OSM found nothing; reuse a check from the last 180 days)
       const prev = previous.get(f.facility_code);
       let googleCheckedNow = false;
-      if (matchSource === "none" && prev?.google_recent) {
+      if (matchSource === "none" && layers.google && prev?.google_recent) {
         if (prev.google_place_id && prev.name_score != null) {
           matchSource = "google";
           googlePlaceId = prev.google_place_id;
@@ -260,7 +288,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
             nearMatch = { source: "google", score: prev.name_score, distanceM: prev.match_distance_m };
           }
         }
-      } else if (matchSource === "none" && googleAvailable) {
+      } else if (matchSource === "none" && layers.google && googleAvailable) {
         const area = ward?.bbox ?? (hfrPoint ? boxAround(hfrPoint.lat, hfrPoint.lng, SEARCH_RADIUS_M) : null);
         if (area) {
           try {
@@ -293,25 +321,42 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       let geocode: CandidatePoint | null = null;
       if (!hfrPoint && !relocation?.inWard) {
         const query = [f.name, f.ward_name, f.council_name, "Tanzania"].filter(Boolean).join(", ");
-        try {
-          const nom = await nominatimSearch(query, { viewbox: ward?.bbox });
-          for (const p of nom) {
-            const iw = await inWardOf(p.lat, p.lng);
-            if (iw !== false) {
-              geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw };
-              break;
+        if (layers.nominatim) {
+          try {
+            const nom = await nominatimSearch(query, { viewbox: ward?.bbox ?? council?.bbox });
+            for (const p of nom) {
+              const iw = await inWardOf(p.lat, p.lng);
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
+                geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw };
+                break;
+              }
             }
+          } catch (e) {
+            console.warn(`[validate] Nominatim failed for ${f.facility_code}: ${errorMessage(e)}`);
           }
-        } catch (e) {
-          console.warn(`[validate] Nominatim failed for ${f.facility_code}: ${errorMessage(e)}`);
         }
-        if (!geocode && googleAvailable) {
+        // Google forward geocoding already has its own layer below, so only MapTiler / ArcGIS are searched here.
+        if (!geocode && extraAvailable && (provider === "maptiler" || provider === "arcgis")) {
+          try {
+            for (const p of await forwardSearch(provider, query, ward?.bbox ?? council?.bbox)) {
+              const iw = await inWardOf(p.lat, p.lng);
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
+                geocode = { source: provider === "arcgis" ? "arcgis_geocode" : "maptiler_geocode", lat: p.lat, lng: p.lng, inWard: iw };
+                break;
+              }
+            }
+          } catch (e) {
+            if (isUnavailable(e)) extraAvailable = false;
+            else console.warn(`[validate] ${provider} failed for ${f.facility_code}: ${errorMessage(e)}`);
+          }
+        }
+        if (!geocode && layers.googleGeocode && googleAvailable) {
           try {
             const res = await googleGeocode(query);
             for (const p of res) {
               if (p.kind === "APPROXIMATE" && !ward) continue;
               const iw = await inWardOf(p.lat, p.lng);
-              if (iw !== false) {
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
                 geocode = { source: "google_geocode", lat: p.lat, lng: p.lng, inWard: iw };
                 break;
               }
@@ -333,18 +378,55 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         nearMatch,
         relocation,
         geocode,
-        centroid: ward ? { source: "ward_centroid", lat: ward.centroid.lat, lng: ward.centroid.lng, inWard: true } : null,
+        centroid: ward && layers.wardCentroid ? { source: "ward_centroid", lat: ward.centroid.lat, lng: ward.centroid.lng, inWard: true } : null,
         review: review ? { decision: review.decision, lat: review.lat, lng: review.lng } : null,
       });
+
+      // 5. Reverse-geocode the chosen point: does MapTiler place it in the HFR ward? (reused while the point is unchanged)
+      let wardCheck: WardNameCheck | null = null;
+      let wardCheckFresh = false;
+      if (result.final && result.geocodeSource !== "ward_centroid" && (f.ward_name || f.council_name)) {
+        const same = prev?.ward_check_lat != null && prev.ward_check_lng != null &&
+          Math.abs(prev.ward_check_lat - result.final.lat) < 1e-6 && Math.abs(prev.ward_check_lng! - result.final.lng) < 1e-6;
+        if (same && prev?.ward_check_recent && prev.ward_check) {
+          wardCheck = prev.ward_check;
+        } else if (extraAvailable && provider) {
+          try {
+            wardCheck = wardNameCheck(await reverseNames(provider, result.final.lat, result.final.lng), f.ward_name, f.council_name);
+            wardCheckFresh = true;
+          } catch (e) {
+            if (isUnavailable(e)) {
+              extraAvailable = false;
+              if (provider === "google") googleAvailable = false;
+            } else console.warn(`[validate] ${provider} reverse failed for ${f.facility_code}: ${errorMessage(e)}`);
+          }
+        }
+      }
+      // 6. Village polygon under the chosen point (local query, no API cost; skipped until a village file is loaded)
+      let village: VillageResult | null = null;
+      if (villagesLoaded && result.final && result.geocodeSource !== "ward_centroid") {
+        village = await checkVillage(result.final.lat, result.final.lng, f.village_name, f.ward_name);
+      }
+      const flags: string[] = [...sanity.flags];
+      if (wardCheck === "differs") {
+        flags.push("geocoder_ward_differs");
+        result.notes.push("The geocoder places this point in a different ward/council than the HFR record");
+      }
+      if (village?.wardDiffers) {
+        flags.push("village_ward_differs");
+        result.notes.push(`The point is in village "${village.village}", which belongs to ward "${village.ward}", not the HFR ward`);
+      }
 
       await q(sql`
         INSERT INTO geo_validation (facility_code, has_boundary, in_ward, in_council, distance_to_ward_m, sanity_flags,
           match_source, matched_name, name_score, match_distance_m, osm_id, google_place_id, google_checked_at, geocode_source,
-          final_lat, final_lng, confidence, notes, checked_at)
+          final_lat, final_lng, confidence, notes, ward_name_check, ward_checked_at, ward_check_lat, ward_check_lng, village_check, boundary_village, boundary_village_ward, checked_at)
         VALUES (${f.facility_code}, ${hasBoundary}, ${inWard}, ${inCouncil}, ${distanceToWardM},
-          ${sanity.flags.length ? sql`ARRAY[${sql.join(sanity.flags.map((x) => sql`${x}`), sql`, `)}]::text[]` : sql`ARRAY[]::text[]`},
+          ${flags.length ? sql`ARRAY[${sql.join(flags.map((x) => sql`${x}`), sql`, `)}]::text[]` : sql`ARRAY[]::text[]`},
           ${matchSource}, ${matchedName}, ${nameScoreVal}, ${matchDistanceM}, ${osmId}, ${googlePlaceId}, ${googleCheckedNow ? sql`now()` : sql`NULL`}, ${result.geocodeSource},
-          ${result.final?.lat ?? null}, ${result.final?.lng ?? null}, ${result.confidence}, ${result.notes.join("; ")}, now())
+          ${result.final?.lat ?? null}, ${result.final?.lng ?? null}, ${result.confidence}, ${result.notes.join("; ")},
+          ${wardCheck}, ${wardCheckFresh ? sql`now()` : sql`NULL`}, ${wardCheckFresh ? result.final!.lat : null}, ${wardCheckFresh ? result.final!.lng : null},
+          ${village?.check ?? null}, ${village?.village ?? null}, ${village?.ward ?? null}, now())
         ON CONFLICT (facility_code) DO UPDATE SET
           has_boundary = EXCLUDED.has_boundary, in_ward = EXCLUDED.in_ward, in_council = EXCLUDED.in_council,
           distance_to_ward_m = EXCLUDED.distance_to_ward_m, sanity_flags = EXCLUDED.sanity_flags,
@@ -352,7 +434,14 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           match_distance_m = EXCLUDED.match_distance_m, osm_id = EXCLUDED.osm_id, google_place_id = EXCLUDED.google_place_id,
           google_checked_at = coalesce(EXCLUDED.google_checked_at, geo_validation.google_checked_at),
           geocode_source = EXCLUDED.geocode_source, final_lat = EXCLUDED.final_lat, final_lng = EXCLUDED.final_lng,
-          confidence = EXCLUDED.confidence, notes = EXCLUDED.notes, checked_at = now()`);
+          confidence = EXCLUDED.confidence, notes = EXCLUDED.notes,
+          ward_name_check = EXCLUDED.ward_name_check,
+          ward_checked_at = coalesce(EXCLUDED.ward_checked_at, geo_validation.ward_checked_at),
+          ward_check_lat = coalesce(EXCLUDED.ward_check_lat, geo_validation.ward_check_lat),
+          ward_check_lng = coalesce(EXCLUDED.ward_check_lng, geo_validation.ward_check_lng),
+          village_check = EXCLUDED.village_check, boundary_village = EXCLUDED.boundary_village,
+          boundary_village_ward = EXCLUDED.boundary_village_ward,
+          checked_at = now()`);
       stats.validated++;
     } catch (e) {
       stats.errors++;

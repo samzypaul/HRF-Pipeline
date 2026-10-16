@@ -6,7 +6,7 @@ import { parseAdminJson, parseCoords, parseDetail, parseListPage, parseRegions, 
 import { DETAIL_FIELDS, diffFields, listData, listHash } from "../diff/fields";
 import { hashOf } from "../util";
 import { validateFacilities } from "../geo/validate";
-import { generateWeeklyReport } from "../ai/report";
+import { generateDailyReport } from "../ai/report";
 import { enqueue, incrementCounts, mergeCounts, type RunRow, type TaskRow } from "./queue";
 
 export interface TaskContext {
@@ -192,9 +192,9 @@ const validateBatch: Handler = async (task, { run }) => {
   await incrementCounts(run.id, { validated: s.validated, googlePlaces: s.googlePlaces, geocoded: s.geocoded });
 };
 
-const weeklyReport: Handler = async (task, { run }) => {
+const dailyReport: Handler = async (task, { run }) => {
   const forRun = Number(task.payload.runId ?? run.id);
-  await generateWeeklyReport(forRun);
+  await generateDailyReport(forRun);
 };
 
 export const HANDLERS: Record<string, Handler> = {
@@ -204,5 +204,5 @@ export const HANDLERS: Record<string, Handler> = {
   ward_list: wardList,
   facility_detail: facilityDetail,
   validate_batch: validateBatch,
-  weekly_report: weeklyReport,
+  weekly_report: dailyReport, // task name kept so queued tasks survive the rename
 };

@@ -3,7 +3,7 @@ import { sleep } from "../util";
 import { countCall } from "./usage";
 
 export interface Place {
-  source: "osm" | "google" | "nominatim" | "google_geocode";
+  source: "osm" | "google" | "nominatim" | "google_geocode" | "maptiler" | "arcgis";
   id: string;
   name: string;
   lat: number;

@@ -11,10 +11,93 @@ const COLORS: Record<string, string> = {
   unchecked: "#8a94a3",
 };
 
-/** All facilities as points coloured by confidence. Uses free OpenFreeMap tiles (no key). */
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+const ESRI_ATTRIBUTION =
+  "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, USGS, NOAA and the GIS user community";
+
+const raster = (
+  tiles: string[],
+  attribution: string,
+  maxzoom: number,
+): maplibregl.StyleSpecification["sources"][string] => ({
+  type: "raster",
+  tiles,
+  tileSize: 256,
+  maxzoom,
+  attribution,
+});
+
+/** Base maps, all free and keyless. Streets/Light are vector styles; Satellite and Topography are raster tiles. */
+const BASEMAPS = {
+  streets: {
+    label: "Streets",
+    style: "https://tiles.openfreemap.org/styles/liberty" as
+      string | maplibregl.StyleSpecification,
+  },
+  light: {
+    label: "Light",
+    style: "https://tiles.openfreemap.org/styles/positron" as
+      string | maplibregl.StyleSpecification,
+  },
+  satellite: {
+    label: "Satellite",
+    style: {
+      version: 8,
+      sources: {
+        imagery: raster(
+          [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`],
+          ESRI_ATTRIBUTION,
+          18,
+        ),
+        labels: raster(
+          [
+            `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+          ],
+          ESRI_ATTRIBUTION,
+          18,
+        ),
+      },
+      layers: [
+        { id: "imagery", type: "raster", source: "imagery" },
+        { id: "labels", type: "raster", source: "labels" },
+      ],
+    } as string | maplibregl.StyleSpecification,
+  },
+  topography: {
+    label: "Topography",
+    style: {
+      version: 8,
+      sources: {
+        topo: raster(
+          [`${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`],
+          ESRI_ATTRIBUTION,
+          18,
+        ),
+      },
+      layers: [{ id: "topo", type: "raster", source: "topo" }],
+    } as string | maplibregl.StyleSpecification,
+  },
+};
+// With a public ArcGIS key (NEXT_PUBLIC_ARCGIS_API_KEY) the four base maps come from the ArcGIS basemap styles service instead.
+const ARCGIS_KEY = process.env.NEXT_PUBLIC_ARCGIS_API_KEY;
+const arcgisStyle = (name: string) =>
+  `https://basemaps-api.arcgis.com/arcgis/rest/services/styles/v2/styles/arcgis/${name}?token=${ARCGIS_KEY}`;
+if (ARCGIS_KEY) {
+  BASEMAPS.streets.style = arcgisStyle("streets");
+  BASEMAPS.light.style = arcgisStyle("light-gray");
+  BASEMAPS.satellite.style = arcgisStyle("imagery");
+  BASEMAPS.topography.style = arcgisStyle("topographic");
+}
+
+type BasemapKey = keyof typeof BASEMAPS;
+
+/** All facilities as points coloured by confidence, over a choice of base maps (no API key needed). */
 export default function FacilityMap({ query }: { query: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const [basemap, setBasemap] = useState<BasemapKey>("streets");
+  const basemapRef = useRef<BasemapKey>(basemap);
+  const appliedRef = useRef<BasemapKey>(basemap); // base map the current map instance was built with
   const [count, setCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,67 +105,204 @@ export default function FacilityMap({ query }: { query: string }) {
     if (!ref.current) return;
     const map = new maplibregl.Map({
       container: ref.current,
-      style: "https://tiles.openfreemap.org/styles/positron",
+      style: BASEMAPS[basemapRef.current].style,
       center: [35.0, -6.3],
       zoom: 5,
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: false }),
+      "top-right",
+    );
     mapRef.current = map;
+    appliedRef.current = basemapRef.current;
 
-    map.on("load", async () => {
+    type MapData = GeoJSON.FeatureCollection & {
+      lookups: Record<
+        "wards" | "councils" | "regions" | "types" | "sources",
+        string[]
+      >;
+    };
+    let data: MapData | null = null;
+    // Start downloading the points now, while the base map style is still loading.
+    const download: Promise<MapData> = fetch(`/api/facilities?${query}`).then(
+      (res) => {
+        if (!res.ok)
+          throw new Error(`Could not load facilities (${res.status})`);
+        return res.json();
+      },
+    );
+    let popup: maplibregl.Popup | null = null;
+    /** One popup at a time: a new one replaces the old. */
+    const show = (next: maplibregl.Popup) => {
+      popup?.remove();
+      popup = next;
+    };
+    const lookup = (kind: keyof MapData["lookups"], i: unknown) =>
+      typeof i === "number" && i >= 0 ? data?.lookups[kind][i] : undefined;
+    /** (Re-)adds the facility points; a style change wipes every source and layer. */
+    const addFacilities = () => {
+      if (!data) return;
       try {
-        const res = await fetch(`/api/facilities?${query}`);
-        if (!res.ok) throw new Error(`Could not load facilities (${res.status})`);
-        const data = await res.json();
-        setCount(data.features.length);
+        if (map.getSource("facilities")) return;
         map.addSource("facilities", { type: "geojson", data });
         map.addLayer({
           id: "facilities",
           type: "circle",
           source: "facilities",
           paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2.5, 10, 5, 14, 8],
-            "circle-color": ["match", ["get", "confidence"], "high", COLORS.high, "medium", COLORS.medium, "low", COLORS.low, COLORS.unchecked],
-            "circle-stroke-width": 0.6,
+            "circle-radius": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              5,
+              2.5,
+              10,
+              5,
+              14,
+              8,
+            ],
+            "circle-color": [
+              "match",
+              ["get", "confidence"],
+              "high",
+              COLORS.high,
+              "medium",
+              COLORS.medium,
+              "low",
+              COLORS.low,
+              COLORS.unchecked,
+            ],
+            "circle-stroke-width": 0.8,
             "circle-stroke-color": "#ffffff",
             "circle-opacity": 0.9,
           },
         });
-        map.on("click", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
-          const f = e.features?.[0];
-          if (!f || f.geometry.type !== "Point") return;
-          const p = f.properties as Record<string, string>;
-          const el = document.createElement("div");
-          el.style.fontSize = "13px";
-          const title = document.createElement("a");
-          title.href = `/facility/${encodeURIComponent(p.code)}`;
-          title.textContent = `${p.name} (${p.code})`;
-          title.style.fontWeight = "600";
-          title.style.color = "#0f6e5b";
-          const meta = document.createElement("div");
-          meta.textContent = `${p.type ?? ""} · ${p.confidence} confidence · location from ${p.source}`;
-          meta.style.color = "#5b6573";
-          el.append(title, meta);
-          new maplibregl.Popup({ offset: 8 }).setLngLat(f.geometry.coordinates as [number, number]).setDOMContent(el).addTo(map);
-        });
-        map.on("mouseenter", "facilities", () => (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", "facilities", () => (map.getCanvas().style.cursor = ""));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+      } catch {
+        // The style is not ready yet (map.getSource throws until it is); the next "styledata" event retries.
       }
+    };
+    // Don't wait for the map's "load" (it fires only after every visible base-map tile has downloaded).
+    map.on("styledata", addFacilities);
+    download
+      .then((d) => {
+        data = d;
+        setCount(d.features.length);
+        addFacilities();
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+
+    map.on("click", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      if (!f || f.geometry.type !== "Point") return;
+      const p = f.properties as Record<string, string>;
+      const el = document.createElement("div");
+      el.style.fontSize = "13px";
+      const title = document.createElement("a");
+      title.href = `/facility/${encodeURIComponent(p.code)}`;
+      title.textContent = `${p.name} (${p.code})`;
+      title.style.fontWeight = "600";
+      title.style.color = "#0f6e5b";
+      const meta = document.createElement("div");
+      meta.textContent = `${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
+      meta.style.color = "#5b6573";
+      el.append(title, meta);
+      show(
+        new maplibregl.Popup({ offset: 8 })
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .setDOMContent(el)
+          .addTo(map),
+      );
     });
+    // Double-click a point: a card with its name, ward, council and region (instead of zooming in).
+    map.on("dblclick", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
+      e.preventDefault();
+      const f = e.features?.[0];
+      if (!f || f.geometry.type !== "Point") return;
+      const p = f.properties as Record<string, string | null>;
+      const el = document.createElement("div");
+      el.style.fontSize = "13px";
+      const name = document.createElement("div");
+      name.textContent = p.name ?? "";
+      name.style.fontWeight = "600";
+      name.style.color = "#0f6e5b";
+      el.append(name);
+      for (const [label, value] of [
+        ["Ward", lookup("wards", p.w)],
+        ["Council", lookup("councils", p.cn)],
+        ["Region", lookup("regions", p.r)],
+      ] as const) {
+        const row = document.createElement("div");
+        row.style.color = "#5b6573";
+        row.textContent = `${label}: ${value || "—"}`;
+        el.append(row);
+      }
+      show(
+        new maplibregl.Popup({
+          offset: 8,
+          closeButton: false,
+          maxWidth: "280px",
+        })
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .setDOMContent(el)
+          .addTo(map),
+      );
+    });
+    map.on(
+      "mouseenter",
+      "facilities",
+      () => (map.getCanvas().style.cursor = "pointer"),
+    );
+    map.on(
+      "mouseleave",
+      "facilities",
+      () => (map.getCanvas().style.cursor = ""),
+    );
     return () => map.remove();
   }, [query]);
 
+  // Switching base map keeps the view; the points are re-added when the new style has loaded.
+  useEffect(() => {
+    basemapRef.current = basemap;
+    if (appliedRef.current === basemap) return;
+    appliedRef.current = basemap;
+    mapRef.current?.setStyle(BASEMAPS[basemap].style);
+  }, [basemap]);
+
   return (
     <div className="relative">
-      <div ref={ref} className="h-[70vh] w-full overflow-hidden rounded-lg border border-line" />
+      <div
+        ref={ref}
+        className="h-[70vh] w-full overflow-hidden rounded-lg border border-line"
+      />
+      <div
+        className="absolute left-3 top-3 flex overflow-hidden rounded-md border border-line bg-white/95 text-xs shadow"
+        role="radiogroup"
+        aria-label="Base map"
+      >
+        {(Object.keys(BASEMAPS) as BasemapKey[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={basemap === k}
+            onClick={() => setBasemap(k)}
+            className={`px-3 py-1.5 font-medium ${basemap === k ? "bg-brand text-white" : "text-ink hover:bg-canvas"}`}
+          >
+            {BASEMAPS[k].label}
+          </button>
+        ))}
+      </div>
       <div className="absolute bottom-3 left-3 rounded-md bg-white/95 px-3 py-2 text-xs shadow">
-        <div className="mb-1 font-semibold">{count == null ? "Loading…" : `${count.toLocaleString()} facilities`}</div>
+        <div className="mb-1 font-semibold">
+          {count == null ? "Loading…" : `${count.toLocaleString()} facilities`}
+        </div>
         {Object.entries(COLORS).map(([k, c]) => (
           <div key={k} className="flex items-center gap-2">
-            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ background: c }}
+            />
             {k}
           </div>
         ))}

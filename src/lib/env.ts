@@ -55,6 +55,9 @@ export const env = {
   get hfrRateMs() {
     return num("HFR_RATE_MS", 1000);
   },
+  get hfrTimeoutMs() {
+    return num("HFR_TIMEOUT_MS", 90_000);
+  },
   get hfrFetchServices() {
     return read("HFR_FETCH_SERVICES") !== "false";
   },
@@ -68,6 +71,18 @@ export const env = {
   },
   get googleGeocodeMonthlyCap() {
     return num("GOOGLE_GEOCODE_MONTHLY_CAP", 9000);
+  },
+  get maptilerKey() {
+    return read("MAPTILER_API_KEY");
+  },
+  get maptilerMonthlyCap() {
+    return num("MAPTILER_MONTHLY_CAP", 90_000);
+  },
+  get arcgisKey() {
+    return read("ARCGIS_API_KEY");
+  },
+  get arcgisMonthlyCap() {
+    return num("ARCGIS_MONTHLY_CAP", 18_000);
   },
   get nominatimEmail() {
     return read("NOMINATIM_EMAIL") ?? read("HFR_CONTACT_EMAIL") ?? "not-set@example.com";

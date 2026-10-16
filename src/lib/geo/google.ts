@@ -57,6 +57,40 @@ export async function googleTextSearch(
     }));
 }
 
+/** Reverse geocoding: names of the administrative areas a point falls in. Counts against the Geocoding cap. */
+export async function googleReverseNames(lat: number, lng: number, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+  const key = env.googleKey;
+  if (!key) throw new GoogleUnavailable("GOOGLE_MAPS_API_KEY not set");
+  if (!(await reserveCall("google_geocode", env.googleGeocodeMonthlyCap))) {
+    throw new GoogleUnavailable("Monthly Google Geocoding cap reached");
+  }
+  const u = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  u.searchParams.set("latlng", `${lat},${lng}`);
+  u.searchParams.set("result_type", "administrative_area_level_3|administrative_area_level_4|sublocality|locality|neighborhood");
+  u.searchParams.set("key", key);
+  const res = await fetchImpl(u, { signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw new Error(`Google reverse geocoding returned ${res.status}`);
+  const json = (await res.json()) as { status: string; results?: GoogleReverseResult[] };
+  if (json.status === "REQUEST_DENIED") throw new GoogleUnavailable("Google rejected the request (is the Geocoding API enabled for this key?)");
+  if (json.status !== "OK" && json.status !== "ZERO_RESULTS") throw new Error(`Google reverse geocoding status ${json.status}`);
+  return googleNames(json.results ?? []);
+}
+
+export interface GoogleReverseResult {
+  address_components?: Array<{ long_name: string; types: string[] }>;
+}
+
+const AREA_TYPES = /^(administrative_area_level_[1-4]|locality|sublocality(_level_\d)?|neighborhood)$/;
+
+/** Long names of the area-type address components, de-duplicated. */
+export function googleNames(results: GoogleReverseResult[]): string[] {
+  const out = new Set<string>();
+  for (const r of results) {
+    for (const c of r.address_components ?? []) if (c.types.some((t) => AREA_TYPES.test(t))) out.add(c.long_name);
+  }
+  return [...out];
+}
+
 /** Geocoding API, limited to Tanzania. */
 export async function googleGeocode(address: string, fetchImpl: typeof fetch = fetch): Promise<Place[]> {
   const key = env.googleKey;

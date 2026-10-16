@@ -25,8 +25,8 @@ export default async function OverviewPage() {
     WHERE f.removed_at IS NULL GROUP BY 1 ORDER BY 2 DESC`);
   const runs = await q<{ id: number; kind: string; status: string; phase: string | null; started_at: string; finished_at: string | null }>(sql`
     SELECT id, kind, status, phase, started_at, finished_at FROM job_runs ORDER BY id DESC LIMIT 5`);
-  const [latestReport] = await q<{ run_id: number; created_at: string; verified: boolean }>(sql`
-    SELECT run_id, created_at, verified FROM weekly_reports ORDER BY created_at DESC LIMIT 1`);
+  const [latestReport] = await q<{ id: number; kind: string }>(sql`
+    SELECT id, kind FROM reports ORDER BY period_start DESC, kind ASC, id DESC LIMIT 1`);
   const lastWeekly = runs.find((r) => r.kind === "weekly");
   const changes = lastWeekly
     ? await q<{ change_type: string; n: number }>(sql`
@@ -120,8 +120,8 @@ export default async function OverviewPage() {
               ))}
             </ul>
             {latestReport && (
-              <Link className="mt-3 inline-block text-sm text-brand underline" href={`/reports/${latestReport.run_id}`}>
-                Latest weekly report →
+              <Link className="mt-3 inline-block text-sm text-brand underline" href={`/reports/${latestReport.id}`}>
+                Latest {latestReport.kind} report →
               </Link>
             )}
           </div>

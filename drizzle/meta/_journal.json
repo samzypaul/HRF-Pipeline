@@ -8,6 +8,48 @@
       "when": 1791466647171,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791871384626,
+      "tag": "0001_app_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791882420905,
+      "tag": "0002_geocoder_layer",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791885222693,
+      "tag": "0003_approval_emails",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791992693344,
+      "tag": "0004_reports",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792048974764,
+      "tag": "0005_facility_services_fk",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792135062986,
+      "tag": "0006_boundaries_councils_villages",
+      "breakpoints": true
     }
   ]
 }

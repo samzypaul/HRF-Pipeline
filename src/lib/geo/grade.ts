@@ -1,10 +1,10 @@
 import type { SanityResult } from "./sanity";
-import { MATCH_DISTANCE_M } from "./name-match";
+import { MATCH_DISTANCE_M, MEDIUM_DISTANCE_M } from "./name-match";
 
 export type Confidence = "high" | "medium" | "low";
 
 export interface CandidatePoint {
-  source: "osm_match" | "google_match" | "nominatim" | "google_geocode" | "ward_centroid";
+  source: "osm_match" | "google_match" | "nominatim" | "maptiler_geocode" | "arcgis_geocode" | "google_geocode" | "ward_centroid";
   lat: number;
   lng: number;
   /** inside the registered ward (null when there is no boundary to test) */
@@ -37,8 +37,8 @@ export interface GradeResult {
 /**
  * Decide the confidence grade and the best location for one facility.
  *  high   – HFR point inside its ward AND a name match within 500 m (or a reviewer confirmed it)
- *  medium – inside its ward without a name match, OR a replacement point found inside the ward
- *  low    – outside its ward, ward centre used, no boundary to check against, or unusable point
+ *  medium – inside its ward with a name match 500 m–1.5 km away, OR a replacement point found inside the ward
+ *  low    – everything else: no name match within 1.5 km, outside its ward, ward centre used, or unusable point
  * The HFR coordinates themselves are never modified; `final` is a separate corrected set.
  */
 export function grade(i: GradeInput): GradeResult {
@@ -49,6 +49,7 @@ export function grade(i: GradeInput): GradeResult {
   }
 
   const closeMatch = i.nearMatch && i.nearMatch.distanceM <= MATCH_DISTANCE_M ? i.nearMatch : null;
+  const looseMatch = i.nearMatch && i.nearMatch.distanceM <= MEDIUM_DISTANCE_M ? i.nearMatch : null;
 
   if (i.sanity.usable && i.hfrPoint) {
     if (i.sanity.fixed) notes.push("latitude/longitude were swapped in HFR");
@@ -58,8 +59,12 @@ export function grade(i: GradeInput): GradeResult {
           notes.push(`${closeMatch.source} name match ${Math.round(closeMatch.distanceM)} m away (score ${closeMatch.score})`);
           return { confidence: "high", final: i.hfrPoint, geocodeSource: "hfr", notes };
         }
-        notes.push("inside ward, no name match nearby");
-        return { confidence: "medium", final: i.hfrPoint, geocodeSource: "hfr", notes };
+        if (looseMatch) {
+          notes.push(`inside ward, ${looseMatch.source} name match ${Math.round(looseMatch.distanceM)} m away (score ${looseMatch.score})`);
+          return { confidence: "medium", final: i.hfrPoint, geocodeSource: "hfr", notes };
+        }
+        notes.push("inside ward, no name match within 1.5 km");
+        return { confidence: "low", final: i.hfrPoint, geocodeSource: "hfr", notes };
       }
       notes.push("HFR point is outside its registered ward");
       for (const alt of [i.relocation, i.geocode]) {
@@ -71,8 +76,8 @@ export function grade(i: GradeInput): GradeResult {
       return { confidence: "low", final: i.hfrPoint, geocodeSource: "hfr", notes };
     }
     notes.push("no ward boundary to check against");
-    if (closeMatch) {
-      notes.push(`${closeMatch.source} name match ${Math.round(closeMatch.distanceM)} m away (score ${closeMatch.score})`);
+    if (looseMatch) {
+      notes.push(`${looseMatch.source} name match ${Math.round(looseMatch.distanceM)} m away (score ${looseMatch.score})`);
       return { confidence: "medium", final: i.hfrPoint, geocodeSource: "hfr", notes };
     }
     return { confidence: "low", final: i.hfrPoint, geocodeSource: "hfr", notes };

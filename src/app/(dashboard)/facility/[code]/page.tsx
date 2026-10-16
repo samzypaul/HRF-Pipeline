@@ -109,6 +109,16 @@ export default async function FacilityPage({ params }: { params: Promise<{ code:
                   {g.final_lat != null ? `${g.final_lat}, ${g.final_lng}` : "none"} <span className="text-muted">({String(g.geocode_source ?? "—")})</span>
                 </dd>
               </div>
+              {g.boundary_village != null && (
+                <div>
+                  <dt className="text-xs text-muted">Village polygon at the corrected point</dt>
+                  <dd>
+                    {String(g.boundary_village)}
+                    {g.boundary_village_ward != null && <span className="text-muted"> (ward {String(g.boundary_village_ward)})</span>}
+                    {g.village_check != null && <span className="text-muted"> · {String(g.village_check)} with the HFR village</span>}
+                  </dd>
+                </div>
+              )}
               {Array.isArray(g.sanity_flags) && g.sanity_flags.length > 0 && (
                 <div>
                   <dt className="text-xs text-muted">Flags</dt>

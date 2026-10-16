@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 
-export type RunKind = "full" | "pilot" | "weekly" | "validate" | "report";
+export type RunKind = "full" | "pilot" | "weekly" | "validate" | "improve" | "report";
 
 export interface RunRow {
   id: number;
@@ -148,6 +148,16 @@ export async function acquireLease(holder: string, seconds: number): Promise<boo
       WHERE runner_lease.expires_at IS NULL OR runner_lease.expires_at < now() OR runner_lease.holder = ${holder}
     RETURNING id`);
   return rows.length > 0;
+}
+
+/**
+ * Call right after winning the lease. Only one tick runs at a time, so a task still "running" now belongs to a runner that died
+ * (dev-server restart, closed terminal, function timeout). Put it back at once instead of waiting for the 10-minute reclaim,
+ * which would otherwise stall the run and make the next runner exit as "idle".
+ */
+export async function requeueOrphans(): Promise<number> {
+  const rows = await q(sql`UPDATE job_tasks SET status = 'pending', updated_at = now() WHERE status = 'running' RETURNING id`);
+  return rows.length;
 }
 
 export async function releaseLease(holder: string) {

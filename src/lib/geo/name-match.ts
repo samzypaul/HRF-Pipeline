@@ -112,5 +112,7 @@ export function nameScore(hfrName: string, otherName: string): number {
 }
 
 export const MATCH_SCORE = 85;
+/** Name match this close to the HFR point = high confidence; up to MEDIUM_DISTANCE_M = medium; further = low. */
 export const MATCH_DISTANCE_M = 500;
+export const MEDIUM_DISTANCE_M = 1500;
 export const SEARCH_RADIUS_M = 2000;

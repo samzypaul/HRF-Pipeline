@@ -7,7 +7,7 @@ export interface Filters {
   confidence?: string;
   type?: string;
   q?: string;
-  issue?: string; // outside_ward | missing_coords | no_match | low | no_ward
+  issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward
 }
 
 export function readFilters(sp: Record<string, string | string[] | undefined> | URLSearchParams): Filters {
@@ -19,6 +19,16 @@ export function readFilters(sp: Record<string, string | string[] | undefined> | 
   return { region: get("region"), council: get("council"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue") };
 }
 
+/**
+ * A corrected point nobody has approved yet: the pipeline chose a point that differs from the HFR one
+ * (geocoder, name match or swap fix, not the ward-centre stand-in) and no reviewer decision exists. Uses aliases f and g.
+ */
+export const PENDING_CORRECTION = sql`(
+  f.removed_at IS NULL AND g.final_lat IS NOT NULL AND coalesce(g.geocode_source, '') NOT IN ('review', 'ward_centroid')
+  AND (f.hfr_lat IS NULL OR f.hfr_lng IS NULL OR abs(g.final_lat - f.hfr_lat) > 0.000001 OR abs(g.final_lng - f.hfr_lng) > 0.000001)
+  AND NOT EXISTS (SELECT 1 FROM review_decisions rd WHERE rd.facility_code = f.facility_code)
+)`;
+
 export function whereFor(f: Filters): SQL {
   const parts: SQL[] = [sql`f.removed_at IS NULL`];
   if (f.region) parts.push(sql`f.region_code = ${f.region}`);
@@ -27,6 +37,12 @@ export function whereFor(f: Filters): SQL {
   if (f.confidence) parts.push(f.confidence === "unchecked" ? sql`g.confidence IS NULL` : sql`g.confidence = ${f.confidence}`);
   if (f.q) parts.push(sql`(f.name ILIKE ${"%" + f.q + "%"} OR f.facility_code ILIKE ${f.q + "%"} OR f.common_name ILIKE ${"%" + f.q + "%"})`);
   switch (f.issue) {
+    case "needs_review":
+      parts.push(sql`g.confidence IS DISTINCT FROM 'high'`);
+      break;
+    case "pending_approval":
+      parts.push(PENDING_CORRECTION);
+      break;
     case "outside_ward":
       parts.push(sql`g.in_ward = false`);
       break;
@@ -89,9 +105,10 @@ export async function listFacilities(f: Filters, page = 1, pageSize = 50) {
 }
 
 export async function filterOptions() {
-  const regions = await q<{ code: string; name: string }>(sql`SELECT code, name FROM admin_units WHERE level = 1 ORDER BY name`);
-  const types = await q<{ t: string }>(sql`
-    SELECT DISTINCT facility_type t FROM facilities WHERE facility_type IS NOT NULL ORDER BY 1`);
+  const [regions, types] = await Promise.all([
+    q<{ code: string; name: string }>(sql`SELECT code, name FROM admin_units WHERE level = 1 ORDER BY name`),
+    q<{ t: string }>(sql`SELECT DISTINCT facility_type t FROM facilities WHERE facility_type IS NOT NULL ORDER BY 1`),
+  ]);
   return { regions, types: types.map((t) => t.t) };
 }
 

@@ -12,6 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "load-wards": "tsx scripts/load-wards.ts",
+    "load-councils": "tsx scripts/load-councils.ts",
+    "load-villages": "tsx scripts/load-villages.ts",
     "worker": "tsx scripts/worker.ts"
   },
   "dependencies": {
@@ -33,10 +35,12 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/shapefile": "^0.6.4",
     "dotenv": "^18.0.6",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "15.5.27",
+    "shapefile": "^0.6.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",

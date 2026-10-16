@@ -1,6 +1,7 @@
 import { Pool, type QueryResultRow } from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
 import { env } from "../env";
 
@@ -19,8 +20,13 @@ export function getPool(): Pool {
       connectionString: url,
       max: Number(process.env.DB_POOL_MAX ?? 3),
       idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 15_000, // Neon can take a few seconds to wake up
+      keepAlive: true, // stops proxies and NAT from silently dropping idle connections
+      keepAliveInitialDelayMillis: 10_000,
       ssl: isLocal || /sslmode=disable/.test(url) ? undefined : { rejectUnauthorized: true },
     });
+    // A dropped idle connection must not crash the process; the pool opens a new one on the next query.
+    globalForDb.__hfrPool.on("error", (e) => console.error("[db] idle connection error", e.message));
   }
   return globalForDb.__hfrPool;
 }
@@ -32,10 +38,38 @@ export function getDb(): NodePgDatabase<typeof schema> {
   return globalForDb.__hfrDb;
 }
 
-/** Run a raw drizzle `sql` query and return typed rows. */
+const dialect = new PgDialect();
+const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|EAI_AGAIN|Connection terminated|timeout exceeded when trying to connect|57P01/i;
+
+/** drizzle reports only "Failed query: ..."; put the driver's reason (ECONNRESET, timeout, syntax error...) in the message. */
+function explain(e: unknown): unknown {
+  const cause = (e as { cause?: Error })?.cause;
+  if (!(e instanceof Error) || !cause?.message || e.message.includes(cause.message)) return e;
+  const firstLine = e.message.split(/\r?\n/)[0];
+  return new Error(`${firstLine} (${cause.message})`, { cause });
+}
+
+/** Run a raw drizzle `sql` query and return typed rows. Read-only queries are retried up to 3 times on a dropped connection. */
 export async function q<T extends QueryResultRow = Record<string, unknown>>(query: SQL): Promise<T[]> {
-  const res = await getDb().execute(query);
-  return res.rows as T[];
+  const db = getDb();
+  try {
+    return (await db.execute(query)).rows as T[];
+  } catch (e) {
+    const detail = [(e as Error)?.message, ((e as { cause?: Error }).cause)?.message].join(" ");
+    const readOnly = /^\s*(select|with)\b/i.test(dialect.sqlToQuery(query).sql);
+    if (!readOnly || !TRANSIENT.test(detail)) throw explain(e);
+    // Neon drops idle connections and can take a few seconds to wake, so one quick retry is not always enough.
+    for (let attempt = 1; ; attempt++) {
+      console.warn(`[db] connection problem, retry ${attempt}/3:`, detail.trim());
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+      try {
+        return (await db.execute(query)).rows as T[];
+      } catch (e2) {
+        const d2 = [(e2 as Error)?.message, ((e2 as { cause?: Error }).cause)?.message].join(" ");
+        if (attempt >= 3 || !TRANSIENT.test(d2)) throw explain(e2);
+      }
+    }
+  }
 }
 
 export async function closeDb() {

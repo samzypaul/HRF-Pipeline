@@ -66,7 +66,7 @@ export class HfrClient {
     this.baseUrl = opts.baseUrl ?? env.hfrBaseUrl;
     this.rateMs = opts.rateMs ?? env.hfrRateMs;
     this.contactEmail = opts.contactEmail ?? env.hfrContactEmail;
-    this.timeoutMs = opts.timeoutMs ?? 20_000;
+    this.timeoutMs = opts.timeoutMs ?? env.hfrTimeoutMs;
     this.retries = opts.retries ?? 3;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.sleepImpl = opts.sleepImpl ?? sleep;

@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
-import { env } from "../env";
-import { countCall } from "../geo/usage";
 import { sendReportEmail } from "../notify/email";
+import { eatDay } from "../settings";
+import { ensureWeeklyReports } from "./weekly";
 import { verifyNumbers } from "./verify";
-import { geminiJson, type GeminiSchema } from "./gemini";
+import { RULES, writeReport, type Recommendation } from "./write";
 
 export interface Digest {
   run: { id: number; kind: string; started_at: string; finished_at: string | null };
@@ -129,86 +129,42 @@ export async function buildDigest(runId: number): Promise<Digest> {
   };
 }
 
-const REPORT_SCHEMA: GeminiSchema = {
-  type: "OBJECT",
-  properties: {
-    summary_md: {
-      type: "STRING",
-      description:
-        "Markdown summary for Ministry of Health and partner staff: 2–4 short sections (What changed, Data quality, Needs attention). Plain language, no more than 350 words.",
-    },
-    anomalies: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          title: { type: "STRING" },
-          detail: { type: "STRING" },
-          facility_codes: { type: "ARRAY", items: { type: "STRING" } },
-        },
-        required: ["title", "detail"],
-      },
-    },
-    review_list: {
-      type: "ARRAY",
-      description: "Facilities a person should check, most important first (max 15).",
-      items: {
-        type: "OBJECT",
-        properties: { facility_code: { type: "STRING" }, reason: { type: "STRING" } },
-        required: ["facility_code", "reason"],
-      },
-    },
-  },
-  required: ["summary_md", "anomalies", "review_list"],
-};
+const DAILY_SYSTEM = `You write the daily data-quality report for Tanzania's Health Facility Registry (HFR) pipeline.
+${RULES}
+- Keep it short and useful for MoH staff deciding what to check today.`;
 
-const SYSTEM = `You write the weekly data-quality report for Tanzania's Health Facility Registry (HFR) pipeline.
-Rules:
-- Use ONLY the numbers and facts in the JSON digest. Never estimate, extrapolate or invent figures.
-- If something is zero or missing, say so plainly; do not speculate about causes beyond "may indicate".
-- Refer to facilities by name and facility code exactly as given.
-- Flag reconciliation gaps (portal total vs rows seen, list task failures, facilities without a ward).
-- Keep it short and useful for MoH staff deciding what to check this week.`;
-
-export async function generateWeeklyReport(runId: number) {
+/** Generate (or regenerate) the daily report for one pipeline run, email it, and refresh the weekly roll-ups. */
+export async function generateDailyReport(runId: number) {
   const digest = await buildDigest(runId);
-  let summary = "";
-  let anomalies: unknown[] = [];
-  let reviewList: unknown[] = [];
-  let model: string | null = null;
+  const day = eatDay(new Date(digest.run.started_at)).date;
+  const ai = await writeReport(DAILY_SYSTEM, `Digest for run ${runId} (${day}):
 
-  if (env.geminiKey) {
-    const { data, model: used } = await geminiJson<{ summary_md: string; anomalies: unknown[]; review_list: unknown[] }>({
-      system: SYSTEM,
-      prompt: `Digest for run ${runId}:\n\n${JSON.stringify(digest, null, 2)}`,
-      schema: REPORT_SCHEMA,
-    });
-    await countCall("gemini");
-    model = used;
-    summary = data.summary_md ?? "";
-    anomalies = Array.isArray(data.anomalies) ? data.anomalies : [];
-    reviewList = Array.isArray(data.review_list) ? data.review_list : [];
-  } else {
-    summary = fallbackSummary(digest);
-  }
+${JSON.stringify(digest, null, 2)}`, () => fallbackSummary(digest));
 
-  const texts = [summary, JSON.stringify(anomalies), JSON.stringify(reviewList)];
-  const verification = verifyNumbers(texts, digest);
+  const verification = verifyNumbers([ai.summary, JSON.stringify(ai.anomalies), JSON.stringify(ai.recommendations), JSON.stringify(ai.reviewList)], digest);
 
-  await q(sql`
-    INSERT INTO weekly_reports (run_id, summary_md, anomalies, review_list, digest, model, verified, verification)
-    VALUES (${runId}, ${summary}, ${JSON.stringify(anomalies)}::jsonb, ${JSON.stringify(reviewList)}::jsonb,
-            ${JSON.stringify(digest)}::jsonb, ${model}, ${verification.ok}, ${JSON.stringify(verification)}::jsonb)
-    ON CONFLICT (run_id) DO UPDATE SET summary_md = EXCLUDED.summary_md, anomalies = EXCLUDED.anomalies,
-      review_list = EXCLUDED.review_list, digest = EXCLUDED.digest, model = EXCLUDED.model,
-      verified = EXCLUDED.verified, verification = EXCLUDED.verification, created_at = now()`);
+  const [row] = await q<{ id: number }>(sql`
+    INSERT INTO reports (kind, run_id, period_start, period_end, summary_md, anomalies, recommendations, review_list, digest, model, verified, verification)
+    VALUES ('daily', ${runId}, ${day}, ${day}, ${ai.summary}, ${JSON.stringify(ai.anomalies)}::jsonb, ${JSON.stringify(ai.recommendations)}::jsonb,
+            ${JSON.stringify(ai.reviewList)}::jsonb, ${JSON.stringify(digest)}::jsonb, ${ai.model}, ${verification.ok}, ${JSON.stringify(verification)}::jsonb)
+    ON CONFLICT (run_id) DO UPDATE SET period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end, summary_md = EXCLUDED.summary_md,
+      anomalies = EXCLUDED.anomalies, recommendations = EXCLUDED.recommendations, review_list = EXCLUDED.review_list, digest = EXCLUDED.digest,
+      model = EXCLUDED.model, verified = EXCLUDED.verified, verification = EXCLUDED.verification, created_at = now()
+    RETURNING id`);
 
   // Only a report whose numbers all check out is emailed.
   if (verification.ok) {
-    const sent = await sendReportEmail(runId, summary);
-    if (sent) await q(sql`UPDATE weekly_reports SET emailed_at = now() WHERE run_id = ${runId}`);
+    const sent = await sendReportEmail({ id: row.id, title: `HFR daily report — ${day}`, summaryMd: ai.summary, recommendations: ai.recommendations as Recommendation[] });
+    if (sent) await q(sql`UPDATE reports SET emailed_at = now() WHERE id = ${row.id}`);
   }
-  return { verification };
+
+  // A weekly report is written once its week is complete (and refreshed on Sunday).
+  try {
+    await ensureWeeklyReports(day);
+  } catch (e) {
+    console.error("[reports] weekly roll-up failed", e);
+  }
+  return { id: row.id, verification };
 }
 
 /** Plain summary used when no Gemini API key is configured. */

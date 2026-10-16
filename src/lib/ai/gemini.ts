@@ -9,6 +9,7 @@ import { env } from "../env";
 export type GeminiSchema = {
   type: "OBJECT" | "ARRAY" | "STRING" | "NUMBER" | "INTEGER" | "BOOLEAN";
   description?: string;
+  enum?: string[];
   properties?: Record<string, GeminiSchema>;
   items?: GeminiSchema;
   required?: string[];

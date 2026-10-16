@@ -10,6 +10,7 @@ import {
   getRun,
   openTaskCount,
   releaseLease,
+  requeueOrphans,
   setRun,
 } from "./queue";
 import { advanceRun } from "./phases";
@@ -42,6 +43,8 @@ export async function runTick(budgetMs: number): Promise<TickResult> {
   let processed = 0;
   let failed = 0;
   try {
+    const orphans = await requeueOrphans();
+    if (orphans) console.log(`[tick] requeued ${orphans} task(s) left running by a stopped runner`);
     while (Date.now() - start < budgetMs - SAFETY_MS) {
       const task = await claimTask();
       if (!task) {
@@ -64,8 +67,10 @@ export async function runTick(budgetMs: number): Promise<TickResult> {
         await handler(task, { hfr, run });
         await completeTask(task.id);
         processed++;
+        console.log(`[run ${run.id}] ${task.type} ${JSON.stringify(task.payload).slice(0, 80)} ok (${processed} this tick)`);
       } catch (e) {
         failed++;
+        console.error(`[run ${run.id}] ${task.type} failed: ${errorMessage(e)}`);
         if (e instanceof HfrBlockedError) {
           // Don't burn attempts while the portal is refusing us; pause the run.
           await failTask(task.id, errorMessage(e), { refundAttempt: true });

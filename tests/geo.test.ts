@@ -59,8 +59,15 @@ describe("grade", () => {
   it("high: in ward + close name match", () => {
     expect(grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM: 120 } }).confidence).toBe("high");
   });
-  it("medium: in ward, match too far away", () => {
-    expect(grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM: 1500 } }).confidence).toBe("medium");
+  it("high up to 500 m, medium to 1.5 km, low beyond", () => {
+    const at = (distanceM: number) => grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM } }).confidence;
+    expect(at(500)).toBe("high");
+    expect(at(501)).toBe("medium");
+    expect(at(1500)).toBe("medium");
+    expect(at(1501)).toBe("low");
+  });
+  it("low: in ward but no name match", () => {
+    expect(grade({ ...base, nearMatch: null }).confidence).toBe("low");
   });
   it("low: outside ward, keeps the HFR point", () => {
     const r = grade({ ...base, inWard: false });

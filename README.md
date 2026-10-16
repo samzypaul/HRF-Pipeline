@@ -77,6 +77,25 @@ Fields `ADM3_EN / ADM2_EN / ADM1_EN` are detected automatically (or pass `--name
 HFR wards are linked to polygons by name after the admin tree is loaded; leftovers are listed on the Admin page,
 where you can link them by hand.
 
+**Council boundaries (optional).** The region/district/council file (`data/tanzania_map.json`) lets the pipeline check points and
+search areas for councils whose wards are not linked yet (fills `in_council`, narrows OSM and geocoder searches, rejects geocoded points
+clearly outside the council):
+
+```bash
+npm run load-councils -- data/tanzania_map.json
+```
+
+**Village boundaries (optional).** A village/mtaa shapefile (WGS 84, `.shp` + `.dbf` side by side) adds a check of the
+village under each corrected point against the facility's HFR village and ward:
+
+```bash
+npm run db:migrate
+npm run load-villages -- data/villages.shp   # add --replace to reload; --name= --ward= --district= --region= to override fields
+```
+
+Afterwards run “Re-validate all locations” on the Admin page. Points whose village polygon belongs to a different ward are
+flagged `village_ward_differs`; the village and its agree/differ result show on the facility page and in the exports.
+
 ### 4. Environment variables
 
 See `.env.example` for every variable with a comment. The essentials:
@@ -88,6 +107,7 @@ See `.env.example` for every variable with a comment. The essentials:
 | `AUTH_SECRET`, `ALLOWED_EMAILS`, `RESEND_API_KEY`, `REPORT_FROM` | dashboard sign-in (magic link) |
 | `HFR_CONTACT_EMAIL`, `NOMINATIM_EMAIL` | polite scraping / OSM usage policy |
 | `GOOGLE_MAPS_API_KEY` (optional) | Google fallback; capped by `GOOGLE_MONTHLY_CAP` |
+| `MAPTILER_API_KEY` (optional) | Extra geocoder layer: missing coordinates, ward-name check, ward-link suggestions; capped by `MAPTILER_MONTHLY_CAP`. Without it the layer can use `GOOGLE_MAPS_API_KEY` (provider setting on Admin) |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` (optional) | AI summary via the Gemini API (without a key a plain summary is written) |
 | `REPORT_RECIPIENTS` | weekly email |
 
@@ -104,8 +124,9 @@ npm run worker -- --start=pilot --region=TZ.SH.KA   # run a pilot from the termi
 
 1. Push this folder to a GitHub repository and import it in Vercel.
 2. Add the environment variables (Production). Set `APP_URL` to the production URL.
-3. Deploy. `vercel.json` registers two cron jobs: the weekly run (`0 23 * * 0` = Monday 02:00 EAT) and a daily
-   watchdog that restarts a stalled run.
+3. Deploy. `vercel.json` registers two daily cron jobs: the scheduler (23:00 UTC = 02:00 EAT), which starts an automatic run
+   when **Admin → Automation settings** says today is a run day (weekly on the chosen weekday, or every day), and a
+   watchdog (07:00 EAT) that restarts a stalled run and sends the optional daily status email.
 4. Open **Admin** → *Check HFR portal*. If it fails from Vercel, run the scraper from your computer with
    `npm run worker` (same database); the dashboard stays on Vercel.
 5. Start a **pilot** for one region, check the numbers, then start the **full national load**.

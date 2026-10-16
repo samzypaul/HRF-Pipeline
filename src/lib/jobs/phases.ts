@@ -3,15 +3,72 @@ import { q } from "../db/client";
 import { applyListDiff } from "../diff/apply";
 import { flagSharedPoints } from "../geo/validate";
 import { matchWards } from "../geo/wards";
-import { enqueue, failedTaskCount, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
+import { notifyPendingCorrections } from "../notify/approvals";
+import { enqueue, failedTaskCount, getRun, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
 
 export const PIPELINES: Record<RunKind, string[]> = {
-  full: ["admin", "list", "wards", "diff", "details", "validate", "finalize"],
+  full: ["admin", "list", "wards", "diff", "details", "validate", "improve", "finalize"],
   pilot: ["admin", "list", "wards", "diff", "details", "validate", "finalize"],
-  weekly: ["admin", "list", "wards", "diff", "details", "validate", "finalize", "report"],
+  weekly: ["admin", "list", "wards", "diff", "details", "validate", "improve", "finalize", "report"],
   validate: ["validate", "finalize"],
+  improve: ["improve", "finalize"],
   report: ["report"],
 };
+
+/** Improve rounds stop after this many passes, or sooner when a pass finds nothing new. */
+const MAX_IMPROVE_ROUNDS = 8;
+
+/** Active facilities with no real location yet: no point at all, or only the ward-centre stand-in. */
+const NO_POINT = sql`(g.facility_code IS NULL OR g.final_lat IS NULL OR g.geocode_source = 'ward_centroid')`;
+
+export async function countMissingPoints(): Promise<number> {
+  const [r] = await q<{ n: number }>(sql`
+    SELECT count(*)::int n FROM facilities f
+    LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
+    WHERE f.removed_at IS NULL AND ${NO_POINT}`);
+  return Number(r?.n ?? 0);
+}
+
+function batchByWard(rows: { facility_code: string; ward_code: string | null }[]) {
+  const batches: { codes: string[] }[] = [];
+  let current: string[] = [];
+  let currentWard: string | null | undefined = undefined;
+  for (const r of rows) {
+    if (current.length >= 20 || (currentWard !== undefined && r.ward_code !== currentWard)) {
+      batches.push({ codes: current });
+      current = [];
+    }
+    current.push(r.facility_code);
+    currentWard = r.ward_code;
+  }
+  if (current.length) batches.push({ codes: current });
+  return batches;
+}
+
+/**
+ * Data-quality pass. Round 1 re-checks every facility that is not high confidence (and has no reviewer decision);
+ * later rounds repeat only for facilities still without a real location, until all are found
+ * or a round makes no progress.
+ */
+async function seedImprove(run: RunRow): Promise<number> {
+  const fresh = (await getRun(run.id)) ?? run;
+  const round = Number(fresh.counts.improveRound ?? 0);
+  const previous = fresh.counts.improveRemaining as number | undefined;
+  const remaining = round === 0 ? undefined : await countMissingPoints();
+  if (round > 0 && (remaining === 0 || round >= MAX_IMPROVE_ROUNDS || (previous != null && remaining! >= previous))) {
+    await mergeCounts(run.id, { improveRemaining: remaining, improveStopped: remaining === 0 ? "all located" : "no further progress" });
+    return 0;
+  }
+  const rows = await q<{ facility_code: string; ward_code: string | null }>(sql`
+    SELECT f.facility_code, f.ward_code FROM facilities f
+    LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
+    LEFT JOIN review_decisions rd ON rd.facility_code = f.facility_code
+    WHERE f.removed_at IS NULL AND rd.facility_code IS NULL
+      AND ${round === 0 ? sql`(g.facility_code IS NULL OR g.confidence IS DISTINCT FROM 'high')` : NO_POINT}
+    ORDER BY f.ward_code NULLS LAST, f.facility_code`);
+  await mergeCounts(run.id, { improveRound: round + 1, improveRemaining: remaining ?? (await countMissingPoints()), improveQueued: rows.length });
+  return enqueue(run.id, "validate_batch", batchByWard(rows), 50);
+}
 
 const regionOf = (run: RunRow) => (run.params.region as string | undefined) || undefined;
 
@@ -64,7 +121,8 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
     case "details": {
       let rows: { facility_code: string; hfr_id: number | null }[];
       if (run.kind === "weekly") {
-        const fraction = Number(process.env.DETAIL_REFRESH_FRACTION ?? 0.25);
+        // Daily runs refresh a seventh as many details, so the portal sees the same load as with a weekly run.
+        const fraction = Number(process.env.DETAIL_REFRESH_FRACTION ?? 0.25) / (run.params.cadence === "daily" ? 7 : 1);
         rows = await q(sql`
           WITH changed AS (
             SELECT DISTINCT facility_code FROM facility_changes
@@ -105,21 +163,13 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
           ORDER BY f.ward_code NULLS LAST, f.facility_code`);
       }
       // One task per ward (max 20 facilities), so OSM/ward lookups are shared.
-      const batches: { codes: string[] }[] = [];
-      let current: string[] = [];
-      let currentWard: string | null | undefined = undefined;
-      for (const r of rows) {
-        if (current.length >= 20 || (currentWard !== undefined && r.ward_code !== currentWard)) {
-          batches.push({ codes: current });
-          current = [];
-        }
-        current.push(r.facility_code);
-        currentWard = r.ward_code;
-      }
-      if (current.length) batches.push({ codes: current });
+      const batches = batchByWard(rows);
       await mergeCounts(run.id, { validateQueued: rows.length });
       return enqueue(run.id, "validate_batch", batches, 50);
     }
+
+    case "improve":
+      return seedImprove(run);
 
     case "finalize": {
       const shared = await flagSharedPoints();
@@ -131,6 +181,14 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
         sharedPointFlags: shared,
         confidence: Object.fromEntries(conf.map((c) => [c.confidence ?? "unchecked", Number(c.n)])),
       });
+      // Ask the approvers to look at newly corrected points. A mail problem must never fail the run.
+      try {
+        const n = await notifyPendingCorrections();
+        await mergeCounts(run.id, { approvalEmail: n.sent ? `sent (${n.pending} new)` : (n.reason ?? "not sent") });
+      } catch (e) {
+        console.error(`[run ${run.id}] approval email failed`, e);
+        await mergeCounts(run.id, { approvalEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
+      }
       // Staging rows are only needed for the diff.
       await q(sql`DELETE FROM list_rows WHERE run_id < ${run.id} - 5`);
       await q(sql`DELETE FROM ward_rows WHERE run_id < ${run.id} - 5`);
@@ -154,6 +212,8 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
 export async function advanceRun(run: RunRow): Promise<boolean> {
   const steps = PIPELINES[run.kind];
   let idx = run.phase ? steps.indexOf(run.phase) : -1;
+  // Improve repeats itself while geocoding keeps finding locations.
+  if (run.phase === "improve" && (await seedPhase(run, "improve")) > 0) return true;
   while (true) {
     idx++;
     if (idx >= steps.length) {

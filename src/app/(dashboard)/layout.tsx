@@ -5,7 +5,7 @@ const NAV = [
   { href: "/", label: "Overview" },
   { href: "/map", label: "Map" },
   { href: "/quality", label: "Data quality" },
-  { href: "/reports", label: "Weekly reports" },
+  { href: "/reports", label: "Reports" },
   { href: "/export", label: "Export" },
   { href: "/admin", label: "Admin" },
 ];
