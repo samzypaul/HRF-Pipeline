@@ -17,6 +17,8 @@ export interface CouncilRow {
 export interface CouncilPolygon {
   id: number;
   bbox: BBox;
+  /** a point guaranteed to lie inside the polygon */
+  centre: { lat: number; lng: number };
 }
 
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -37,20 +39,25 @@ export function pickCouncil(rows: CouncilRow[], council: string | null, region: 
   return best && best.score >= 85 ? best.id : null;
 }
 
-let cache: CouncilRow[] | null = null;
+let cache: Promise<CouncilRow[]> | null = null;
 const resolved = new Map<string, CouncilPolygon | null>();
 
 /** Polygon (id + bounding box) for an HFR council, cached for the life of the process. Null when no council file is loaded. */
 export async function councilPolygon(council: string | null, region: string | null): Promise<CouncilPolygon | null> {
   const key = `${normAdmin(region)}|${(council ?? "").toLowerCase()}`;
   if (resolved.has(key)) return resolved.get(key)!;
-  cache ??= await q<CouncilRow>(sql`SELECT id, name, district_name, region_name FROM council_boundaries`);
-  const id = pickCouncil(cache, council, region);
+  // Keep the promise, not the rows, so lanes asking at the same moment share one query.
+  cache ??= q<CouncilRow>(sql`SELECT id, name, district_name, region_name FROM council_boundaries`).catch((e) => {
+    cache = null;
+    throw e;
+  });
+  const id = pickCouncil(await cache, council, region);
   let out: CouncilPolygon | null = null;
   if (id != null) {
-    const [r] = await q<{ s: number; w: number; n: number; e: number }>(sql`
-      SELECT ST_YMin(geom) s, ST_XMin(geom) w, ST_YMax(geom) n, ST_XMax(geom) e FROM council_boundaries WHERE id = ${id}`);
-    if (r) out = { id, bbox: { south: r.s, west: r.w, north: r.n, east: r.e } };
+    const [r] = await q<{ s: number; w: number; n: number; e: number; clat: number; clng: number }>(sql`
+      SELECT ST_YMin(geom) s, ST_XMin(geom) w, ST_YMax(geom) n, ST_XMax(geom) e,
+             ST_Y(ST_PointOnSurface(geom)) clat, ST_X(ST_PointOnSurface(geom)) clng FROM council_boundaries WHERE id = ${id}`);
+    if (r) out = { id, bbox: { south: r.s, west: r.w, north: r.n, east: r.e }, centre: { lat: r.clat, lng: r.clng } };
   }
   resolved.set(key, out);
   return out;

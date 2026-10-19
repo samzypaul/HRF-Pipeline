@@ -43,3 +43,9 @@ next-env.d.ts
 
 # local data files (ward boundaries etc.)
 /data/
+
+# design documents stay local
+/docs/
+
+# IDE settings
+/.idea/

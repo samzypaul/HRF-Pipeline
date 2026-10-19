@@ -28,6 +28,47 @@ describe("Google reverse names", () => {
   });
 });
 
+describe("all providers at once", () => {
+  it("all uses every provider that has a key, in priority order", async () => {
+    const { resolveProviders } = await import("@/lib/geo/provider");
+    const saved = { m: process.env.MAPTILER_API_KEY, g: process.env.GOOGLE_MAPS_API_KEY, a: process.env.ARCGIS_API_KEY };
+    try {
+      process.env.MAPTILER_API_KEY = "m";
+      process.env.GOOGLE_MAPS_API_KEY = "g";
+      process.env.ARCGIS_API_KEY = "a";
+      expect(resolveProviders("all")).toEqual(["maptiler", "arcgis", "google"]);
+      delete process.env.MAPTILER_API_KEY;
+      expect(resolveProviders("all")).toEqual(["arcgis", "google"]);
+      expect(resolveProviders("arcgis")).toEqual(["arcgis"]);
+      expect(resolveProviders("maptiler")).toEqual([]);
+    } finally {
+      for (const [k, v] of [["MAPTILER_API_KEY", saved.m], ["GOOGLE_MAPS_API_KEY", saved.g], ["ARCGIS_API_KEY", saved.a]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+  it("one provider failing or being unavailable does not hide the others", async () => {
+    const { acrossProviders } = await import("@/lib/geo/provider");
+    const { ArcgisUnavailable } = await import("@/lib/geo/arcgis");
+    const r = await acrossProviders(["google", "arcgis", "maptiler"], async (p) => {
+      if (p === "arcgis") throw new ArcgisUnavailable("cap");
+      if (p === "google") throw new Error("timeout");
+      return [p];
+    });
+    expect(r.answers).toEqual([{ provider: "maptiler", value: ["maptiler"] }]);
+    expect(r.unavailable).toEqual(["arcgis"]);
+    expect(r.errors.map((e) => e.provider)).toEqual(["google"]);
+  });
+  it("combines ward checks: one agreement settles it", async () => {
+    const { combineWardChecks } = await import("@/lib/geo/maptiler");
+    expect(combineWardChecks(["differs", "agrees"])).toBe("agrees");
+    expect(combineWardChecks(["differs", "unknown"])).toBe("differs");
+    expect(combineWardChecks(["unknown"])).toBe("unknown");
+    expect(combineWardChecks([])).toBe("unknown");
+  });
+});
+
 describe("provider choice", () => {
   it("auto prefers MapTiler, then Google, else none", async () => {
     const { resolveProvider } = await import("@/lib/geo/provider");

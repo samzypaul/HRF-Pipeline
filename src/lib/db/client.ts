@@ -18,7 +18,7 @@ export function getPool(): Pool {
     const isLocal = /@(localhost|127\.0\.0\.1)(:|\/)/.test(url);
     globalForDb.__hfrPool = new Pool({
       connectionString: url,
-      max: Number(process.env.DB_POOL_MAX ?? 3),
+      max: env.dbPoolMax,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 15_000, // Neon can take a few seconds to wake up
       keepAlive: true, // stops proxies and NAT from silently dropping idle connections

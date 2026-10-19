@@ -36,6 +36,60 @@ export function compareVillage(
   return { check, village: found.name, ward: found.ward_name, wardDiffers };
 }
 
+export interface VillageCandidate {
+  id: number;
+  name: string;
+  ward_name: string | null;
+  district_name: string | null;
+  region_name: string | null;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * Pick the village polygon an HFR record names: same ward and region, village name ≥ SAME_NAME alike, the council
+ * (district) breaking ties. Null when nothing matches or two different villages tie. Pure, so it can be unit-tested.
+ */
+export function pickVillage(
+  rows: VillageCandidate[],
+  hfrVillage: string | null,
+  hfrWard: string | null,
+  hfrCouncil: string | null,
+  hfrRegion: string | null,
+): VillageCandidate | null {
+  const vn = normAdmin(hfrVillage);
+  const wn = normAdmin(hfrWard);
+  if (!vn || !wn) return null;
+  const rn = normAdmin(hfrRegion);
+  const cn = normAdmin(hfrCouncil);
+  const scored = rows
+    .filter((r) => normAdmin(r.ward_name) === wn && (!rn || normAdmin(r.region_name) === rn))
+    .map((r) => ({ r, name: ratio(vn, normAdmin(r.name)), district: cn && normAdmin(r.district_name) ? ratio(cn, normAdmin(r.district_name)) : 0 }))
+    .filter((s) => s.name >= SAME_NAME)
+    .sort((a, b) => b.name + (b.district >= 80 ? 10 : 0) - (a.name + (a.district >= 80 ? 10 : 0)));
+  if (scored.length === 0) return null;
+  const [best, second] = scored;
+  // The same village name twice in one ward, in different councils or far apart, cannot be told apart.
+  const tied = second && second.name === best.name && (second.district >= 80) === (best.district >= 80) && second.r.id !== best.r.id;
+  return tied ? null : best.r;
+}
+
+/** Centre of the village polygon the HFR record names, for facilities with no usable point. Null when none can be identified. */
+export async function villageCentroid(
+  hfrVillage: string | null,
+  hfrWard: string | null,
+  hfrCouncil: string | null,
+  hfrRegion: string | null,
+): Promise<{ lat: number; lng: number; village: string } | null> {
+  if (!normAdmin(hfrVillage) || !normAdmin(hfrWard)) return null;
+  const rows = await q<VillageCandidate>(sql`
+    SELECT id, name, ward_name, district_name, region_name,
+           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng
+    FROM village_boundaries WHERE regexp_replace(lower(ward_name), '[^a-z0-9]+', '', 'g') = ${hfrWard!.toLowerCase().replace(/[^a-z0-9]+/g, "")}`);
+  const v = pickVillage(rows, hfrVillage, hfrWard, hfrCouncil, hfrRegion);
+  return v ? { lat: v.lat, lng: v.lng, village: v.name } : null;
+}
+
 /** True once a village file has been loaded (checks are skipped, not marked "unknown", before that). */
 export async function hasVillageBoundaries(): Promise<boolean> {
   const [r] = await q<{ n: number }>(sql`SELECT count(*)::int n FROM (SELECT 1 FROM village_boundaries LIMIT 1) x`);

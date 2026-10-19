@@ -9,7 +9,7 @@ export interface Settings {
   schedule: { cadence: Cadence; weekday: number };
   /** Morning status email to REPORT_RECIPIENTS. */
   dailyEmail: { enabled: boolean };
-  /** Geocoder behind the "extra geocoder" layer: MapTiler, Google, or whichever has a key (MapTiler first). */
+  /** Geocoders behind the "extra geocoder" layer: all with a key at once ("all"), one of them, or the first with a key ("auto"). */
   geoProvider: GeoProvider;
   /** Email a list of corrected points awaiting approval after each run. Empty recipients = REPORT_RECIPIENTS. */
   approvals: { emailEnabled: boolean; recipients: string[] };
@@ -22,7 +22,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   schedule: { cadence: "weekly", weekday: 1 },
   dailyEmail: { enabled: false },
-  geoProvider: "auto",
+  geoProvider: "all",
   approvals: { emailEnabled: true, recipients: [] },
   reports: { recipients: [] },
   geoLayers: { osm: true, google: true, nominatim: true, extraGeocoder: true, googleGeocode: true, wardCentroid: true },
@@ -47,7 +47,7 @@ export const GEO_LAYER_INFO: { key: keyof Settings["geoLayers"]; label: string; 
     hint: "Reverse-geocodes each point to check its ward name, suggests ward links, and (MapTiler only) finds points for facilities with no coordinates. Provider chosen below.",
   },
   { key: "googleGeocode", label: "Google geocoding", hint: "Second geocoder, used after Nominatim. Counts against the monthly cap." },
-  { key: "wardCentroid", label: "Ward centre stand-in", hint: "Last resort: low-confidence point at the middle of the ward." },
+  { key: "wardCentroid", label: "Ward centre stand-in", hint: "Last resort: low-confidence point at the middle of the ward (or of the council when there is no ward)." },
 ];
 
 /** Scheduler bookkeeping, kept apart from user settings so saving the form never resets it. */
@@ -93,7 +93,7 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
       emailEnabled: typeof approvals.emailEnabled === "boolean" ? approvals.emailEnabled : d.approvals.emailEnabled,
       recipients: parseEmails(approvals.recipients),
     },
-    geoProvider: provider === "maptiler" || provider === "google" || provider === "arcgis" || provider === "auto" ? provider : d.geoProvider,
+    geoProvider: provider === "maptiler" || provider === "google" || provider === "arcgis" || provider === "auto" || provider === "all" ? provider : d.geoProvider,
     schedule: {
       cadence: sched.cadence === "off" || sched.cadence === "daily" || sched.cadence === "weekly" ? sched.cadence : d.schedule.cadence,
       weekday: Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 ? weekday : d.schedule.weekday,

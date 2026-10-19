@@ -82,16 +82,24 @@ export async function enqueue(runId: number, type: string, payloads: Record<stri
   return payloads.length;
 }
 
+/** Task types that call the HFR portal. They share one request budget, so they run in their own lane(s). */
+export const SCRAPE_TASK_TYPES = ["admin_regions", "admin_children", "list_page", "ward_list", "facility_detail"];
+
+export type Lane = "scrape" | "compute";
+
 /**
- * Claim the next task. Tasks stuck in "running" for 10 minutes (a crashed tick)
+ * Claim the next task for a lane. Tasks stuck in "running" for 10 minutes (a crashed tick)
  * are picked up again. SKIP LOCKED keeps two runners from taking the same task.
  */
-export async function claimTask(): Promise<TaskRow | null> {
+export async function claimTask(lane: Lane): Promise<TaskRow | null> {
+  const types = sql.join(SCRAPE_TASK_TYPES.map((t) => sql`${t}`), sql`, `);
+  const laneFilter = lane === "scrape" ? sql`t.type IN (${types})` : sql`t.type NOT IN (${types})`;
   const [t] = await q<TaskRow>(sql`
     UPDATE job_tasks SET status = 'running', attempts = attempts + 1, updated_at = now()
     WHERE id = (
       SELECT t.id FROM job_tasks t JOIN job_runs r ON r.id = t.run_id AND r.status = 'running'
-      WHERE t.status = 'pending' OR (t.status = 'running' AND t.updated_at < now() - interval '10 minutes')
+      WHERE (t.status = 'pending' OR (t.status = 'running' AND t.updated_at < now() - interval '10 minutes'))
+        AND ${laneFilter}
       ORDER BY t.priority, t.id
       LIMIT 1
       FOR UPDATE OF t SKIP LOCKED
@@ -125,6 +133,14 @@ export async function openTaskCount(runId: number): Promise<number> {
   const [r] = await q<{ n: number }>(sql`
     SELECT count(*)::int n FROM job_tasks WHERE run_id = ${runId} AND status IN ('pending', 'running')`);
   return Number(r?.n ?? 0);
+}
+
+/** True while any running run still has a pending or running task, whichever lane owns it. */
+export async function anyOpenTasks(): Promise<boolean> {
+  const rows = await q(sql`
+    SELECT 1 FROM job_tasks t JOIN job_runs r ON r.id = t.run_id AND r.status = 'running'
+    WHERE t.status IN ('pending', 'running') LIMIT 1`);
+  return rows.length > 0;
 }
 
 export async function failedTaskCount(runId: number, types?: string[]): Promise<number> {

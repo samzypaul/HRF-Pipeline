@@ -14,6 +14,7 @@
     "load-wards": "tsx scripts/load-wards.ts",
     "load-councils": "tsx scripts/load-councils.ts",
     "load-villages": "tsx scripts/load-villages.ts",
+    "derive-wards": "tsx scripts/derive-wards.ts",
     "worker": "tsx scripts/worker.ts"
   },
   "dependencies": {

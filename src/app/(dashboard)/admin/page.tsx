@@ -235,6 +235,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <label className="flex flex-col gap-1 text-xs text-muted">
               Extra geocoder provider
               <select className="input" name="geoProvider" defaultValue={settings.geoProvider}>
+                <option value="all">All at once (MapTiler, ArcGIS and Google: every one that has a key)</option>
                 <option value="auto">Automatic (MapTiler, else Google, else ArcGIS, whichever has a key)</option>
                 <option value="maptiler">MapTiler (MAPTILER_API_KEY)</option>
                 <option value="google">Google (GOOGLE_MAPS_API_KEY, counts toward the Geocoding cap)</option>

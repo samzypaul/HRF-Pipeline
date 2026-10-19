@@ -24,6 +24,9 @@ const COLUMNS = [
   "council_code",
   "ward_code",
   "date_opened",
+  "phone",
+  "phone_e164",
+  "website",
   "hfr_lat",
   "hfr_lng",
   "confidence",
@@ -131,7 +134,7 @@ export async function GET(req: Request) {
   const rows = await q<Record<string, unknown>>(sql`
     SELECT f.facility_code, f.name, f.common_name, f.facility_type, f.operating_status, f.registration_status,
            f.ownership_category, f.ownership_authority, f.moh_authority, f.region_name, f.district_name, f.council_name,
-           f.ward_name, f.village_name, f.region_code, f.council_code, f.ward_code, f.date_opened, f.hfr_lat, f.hfr_lng,
+           f.ward_name, f.village_name, f.region_code, f.council_code, f.ward_code, f.date_opened, f.phone, f.phone_e164, f.website, f.hfr_lat, f.hfr_lng,
            g.confidence, g.in_ward, g.distance_to_ward_m, g.match_source, g.name_score, g.geocode_source, g.boundary_village, g.village_check,
            g.final_lat, g.final_lng, g.sanity_flags, r.decision AS review_decision, g.notes,
            (SELECT count(*)::int FROM facility_services s WHERE s.facility_code = f.facility_code) AS services_count,

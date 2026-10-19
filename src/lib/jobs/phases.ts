@@ -18,8 +18,8 @@ export const PIPELINES: Record<RunKind, string[]> = {
 /** Improve rounds stop after this many passes, or sooner when a pass finds nothing new. */
 const MAX_IMPROVE_ROUNDS = 8;
 
-/** Active facilities with no real location yet: no point at all, or only the ward-centre stand-in. */
-const NO_POINT = sql`(g.facility_code IS NULL OR g.final_lat IS NULL OR g.geocode_source = 'ward_centroid')`;
+/** Active facilities with no real location yet: no point at all, or only a village/ward-centre stand-in. */
+const NO_POINT = sql`(g.facility_code IS NULL OR g.final_lat IS NULL OR g.geocode_source IN ('ward_centroid', 'village_centroid', 'council_centroid'))`;
 
 export async function countMissingPoints(): Promise<number> {
   const [r] = await q<{ n: number }>(sql`
@@ -69,6 +69,9 @@ async function seedImprove(run: RunRow): Promise<number> {
   await mergeCounts(run.id, { improveRound: round + 1, improveRemaining: remaining ?? (await countMissingPoints()), improveQueued: rows.length });
   return enqueue(run.id, "validate_batch", batchByWard(rows), 50);
 }
+
+/** Not yet validated since this run started (needs the geo_validation join aliased as g). */
+const notValidatedThisRun = (run: RunRow) => sql`(g.checked_at IS NULL OR g.checked_at < ${run.started_at}::timestamptz)`;
 
 const regionOf = (run: RunRow) => (run.params.region as string | undefined) || undefined;
 
@@ -136,12 +139,14 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
           )
           SELECT f.facility_code, f.hfr_id FROM facilities f
           WHERE f.facility_code IN (SELECT facility_code FROM changed UNION SELECT facility_code FROM never UNION SELECT facility_code FROM stale)
-            AND f.removed_at IS NULL`);
+            AND f.removed_at IS NULL
+          ORDER BY f.ward_code NULLS LAST, f.facility_code`);
       } else {
+        // Ward order lets the validate batches that start while details are still being fetched share their ward lookups.
         rows = await q(sql`
           SELECT f.facility_code, f.hfr_id FROM facilities f
           WHERE f.removed_at IS NULL ${scopeFilter(run)}
-          ORDER BY f.facility_code`);
+          ORDER BY f.ward_code NULLS LAST, f.facility_code`);
       }
       await mergeCounts(run.id, { detailsQueued: rows.length });
       return enqueue(run.id, "facility_detail", rows.map((r) => ({ code: r.facility_code, hfrId: r.hfr_id })), 40);
@@ -155,11 +160,15 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
           LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
           WHERE f.removed_at IS NULL AND (f.last_detail_at >= ${run.started_at}::timestamptz OR g.facility_code IS NULL
             OR f.facility_code IN (SELECT facility_code FROM facility_changes WHERE run_id = ${run.id}))
+            AND ${notValidatedThisRun(run)}
           ORDER BY f.ward_code NULLS LAST, f.facility_code`);
       } else {
+        // The details phase already queued validation for every facility it finished, so only the rest are left here.
+        // A "validate" run exists to re-check everything, so it skips nothing.
         rows = await q(sql`
           SELECT f.facility_code, f.ward_code FROM facilities f
-          WHERE f.removed_at IS NULL ${run.kind === "validate" ? sql`` : scopeFilter(run)}
+          LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
+          WHERE f.removed_at IS NULL ${run.kind === "validate" ? sql`` : sql`AND ${notValidatedThisRun(run)} ${scopeFilter(run)}`}
           ORDER BY f.ward_code NULLS LAST, f.facility_code`);
       }
       // One task per ward (max 20 facilities), so OSM/ward lookups are shared.

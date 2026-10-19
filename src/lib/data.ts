@@ -24,7 +24,7 @@ export function readFilters(sp: Record<string, string | string[] | undefined> | 
  * (geocoder, name match or swap fix, not the ward-centre stand-in) and no reviewer decision exists. Uses aliases f and g.
  */
 export const PENDING_CORRECTION = sql`(
-  f.removed_at IS NULL AND g.final_lat IS NOT NULL AND coalesce(g.geocode_source, '') NOT IN ('review', 'ward_centroid')
+  f.removed_at IS NULL AND g.final_lat IS NOT NULL AND coalesce(g.geocode_source, '') NOT IN ('review', 'ward_centroid', 'village_centroid', 'council_centroid')
   AND (f.hfr_lat IS NULL OR f.hfr_lng IS NULL OR abs(g.final_lat - f.hfr_lat) > 0.000001 OR abs(g.final_lng - f.hfr_lng) > 0.000001)
   AND NOT EXISTS (SELECT 1 FROM review_decisions rd WHERE rd.facility_code = f.facility_code)
 )`;

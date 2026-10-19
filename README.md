@@ -40,9 +40,11 @@ Google (fallback) ──────┘         │
 
 | Grade | Rule |
 |---|---|
-| High | HFR point inside its registered ward **and** an OSM/Google place with the same name within 500 m, or confirmed by a reviewer |
-| Medium | Inside its ward without a name match, **or** a replacement point found inside the ward |
-| Low | Outside its ward, ward centre used as a stand-in, no boundary to check against, or unusable point |
+| High | HFR point inside its registered ward **and** an OSM/Google place with the same name within 1 km, or confirmed by a reviewer |
+| Medium | Inside its ward with an OSM/Google name match 1–3.5 km away, **or** a replacement point found inside the ward |
+| Low | No name match within 3.5 km, outside its ward or council, a village/ward centre used as a stand-in, or unusable point |
+
+The distances are `MATCH_DISTANCE_M` (1 km), `MEDIUM_DISTANCE_M` (3.5 km) and `SEARCH_RADIUS_M` in `src/lib/geo/name-match.ts`.
 
 HFR's own coordinates are never changed; the corrected point is stored separately (`geo_validation.final_lat/lng`).
 
@@ -96,6 +98,18 @@ npm run load-villages -- data/villages.shp   # add --replace to reload; --name= 
 Afterwards run “Re-validate all locations” on the Admin page. Points whose village polygon belongs to a different ward are
 flagged `village_ward_differs`; the village and its agree/differ result show on the facility page and in the exports.
 
+**No ward file?** Build ward polygons from the village layer instead (each village carries its ward) and link them to the HFR wards:
+
+```bash
+npm run derive-wards            # add --replace to rebuild; never touches rows from a real ward file
+```
+
+**How the grade uses these layers.** Beyond the ward and name-match rules: a point outside its council polygon is low (a geocoded
+replacement inside the council makes it medium); a village polygon that matches the HFR village and ward raises the grade one step,
+while a village or geocoder placing the point in another ward lowers it one step (both: low); a point shared with another facility
+is lowered one step; a name match needs at least one distinctive word in common, and a match on a very short name (`weak_name_match`)
+cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, low) before the ward centre.
+
 ### 4. Environment variables
 
 See `.env.example` for every variable with a comment. The essentials:
@@ -147,6 +161,11 @@ npm run build
 ## Being polite to the HFR portal
 
 - One request at a time, at least `HFR_RATE_MS` (default 1000 ms) apart, with a contact email in the User-Agent.
+  This limit is shared by every lane, so the extra parallelism below never speeds up requests to the portal.
+- Scraping and validation run side by side: a facility is queued for validation as soon as its details are saved
+  (grouped by ward), compute lanes validate batches while the scrape lane keeps fetching, and facilities inside a batch are
+  validated in parallel. Google / ArcGIS / MapTiler calls share one limiter (`GEO_API_CONCURRENCY`); Nominatim and Overpass
+  keep their own spacing. Tune with `SCRAPE_LANES`, `COMPUTE_LANES`, `GEO_CONCURRENCY` and `DB_POOL_MAX` (see `.env.example`).
 - On 403 or repeated 429/5xx the run **pauses** instead of retrying; resume it from the Admin page.
 - The Ministry also provides the master facility list on request (*Download Operating Facilities* on the portal),
   a good backup source.

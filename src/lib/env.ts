@@ -4,6 +4,8 @@
  * when a secret is not set.
  */
 
+import { availableParallelism } from "node:os";
+
 function read(name: string): string | undefined {
   const v = process.env[name];
   return v === undefined || v === "" ? undefined : v;
@@ -133,4 +135,33 @@ export const env = {
   get tickBudgetMs() {
     return num("TICK_BUDGET_MS", 180_000);
   },
+
+  // Parallelism. Defaults follow the machine's CPU count; every value can be overridden.
+  get cpuCount() {
+    return Math.max(1, availableParallelism());
+  },
+  /** Lanes that fetch from the HFR portal. The portal itself is still limited to one request per HFR_RATE_MS in total. */
+  get scrapeLanes() {
+    return Math.max(1, Math.floor(num("SCRAPE_LANES", 2)));
+  },
+  /** Lanes that validate facilities (spatial queries, geocoders) while scraping continues. */
+  get computeLanes() {
+    return Math.max(1, Math.floor(num("COMPUTE_LANES", clamp(availableParallelism() - 1, 2, 6))));
+  },
+  /** Facilities validated at the same time inside one validate_batch task. */
+  get geoConcurrency() {
+    return Math.max(1, Math.floor(num("GEO_CONCURRENCY", 4)));
+  },
+  /** Paid/limited geocoder and Places calls in flight at once, across all lanes. */
+  get geoApiConcurrency() {
+    return Math.max(1, Math.floor(num("GEO_API_CONCURRENCY", 8)));
+  },
+  /** Database connections: enough for every lane plus the dashboard. */
+  get dbPoolMax() {
+    return Math.max(2, Math.floor(num("DB_POOL_MAX", clamp(availableParallelism() * 2, 6, 16))));
+  },
 };
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}

@@ -68,6 +68,12 @@ export function namesFrom(features: Feature[]): string[] {
 
 export type WardNameCheck = "agrees" | "differs" | "unknown";
 
+/** Combine the verdicts of several geocoders: one that agrees settles it, "differs" needs a dissent with no agreement. */
+export function combineWardChecks(checks: WardNameCheck[]): WardNameCheck {
+  if (checks.includes("agrees")) return "agrees";
+  return checks.includes("differs") ? "differs" : "unknown";
+}
+
 /**
  * Compare reverse-geocoded names with the HFR ward and council. "differs" only when MapTiler returned
  * names but none of them is the ward or the council; no names at all is "unknown" (thin map coverage).

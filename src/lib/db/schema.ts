@@ -122,7 +122,8 @@ export const facilities = pgTable(
     operatingStatus: text("operating_status"),
     registrationStatus: text("registration_status"),
     dateOpened: text("date_opened"),
-    phone: text("phone"),
+    phone: text("phone"), // raw "Official Phone" text from HFR
+    phoneE164: text("phone_e164"), // normalised by src/lib/phone.ts; null when unreadable
     website: text("website"),
     nearestFacility: text("nearest_facility"),
     ctcId: text("ctc_id"),
@@ -228,7 +229,7 @@ export const geoValidation = pgTable(
     osmId: text("osm_id"),
     googlePlaceId: text("google_place_id"),
     googleCheckedAt: ts("google_checked_at"),
-    geocodeSource: text("geocode_source"), // hfr | osm_match | google_match | nominatim | maptiler_geocode | google_geocode | ward_centroid | review
+    geocodeSource: text("geocode_source"), // hfr | osm_match | google_match | nominatim | maptiler_geocode | google_geocode | village_centroid | ward_centroid | council_centroid | review
     finalLat: doublePrecision("final_lat"),
     finalLng: doublePrecision("final_lng"),
     confidence: text("confidence"), // high | medium | low

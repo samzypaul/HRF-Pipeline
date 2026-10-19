@@ -100,7 +100,36 @@ export function tokenSetRatio(a: string, b: string): number {
   return Math.max(ratio(sInter, sA), ratio(sInter, sB), ratio(sA, sB));
 }
 
-/** Score two facility names 0–100. */
+/** Words that survive normalisation but do not identify a place ("Mission", "Central", "Kaskazini"). */
+const WEAK_TOKENS = new Set([
+  "mission", "health", "medical", "afya", "private", "community", "village", "kijiji", "mtaa", "central", "general",
+  "kati", "kuu", "mpya", "new", "old", "north", "south", "east", "west", "kaskazini", "kusini", "mashariki", "magharibi",
+  "st", "saint", "holy", "family", "care", "service", "services", "group", "company", "ltd", "limited", "centre", "center",
+]);
+
+/** Tokens of a normalised name that can identify a place: not generic and at least 3 characters. */
+function distinctiveTokens(normalised: string): string[] {
+  return normalised.split(" ").filter((t) => t.length >= 3 && !WEAK_TOKENS.has(t));
+}
+
+/** True when two tokens are the same word, allowing a small spelling difference in longer words only. */
+function sameToken(x: string, y: string): boolean {
+  return x === y || (Math.min(x.length, y.length) >= 5 && ratio(x, y) >= 85);
+}
+
+/**
+ * True when the part of the name that identifies the place is very short (under 4 characters, e.g. "Ido"),
+ * so a match on it is easy to get by accident and should not earn the top grade.
+ */
+export function nameIsWeak(name: string): boolean {
+  const tokens = distinctiveTokens(normalizeName(name));
+  return tokens.length === 0 || tokens.every((t) => t.length < 4);
+}
+
+/**
+ * Score two facility names 0–100. A pair is only a match (≥ MATCH_SCORE) when at least one distinctive word
+ * appears in both, so "Mission Dispensary" no longer matches every other "… Mission".
+ */
 export function nameScore(hfrName: string, otherName: string): number {
   const a = normalizeName(hfrName);
   const b = normalizeName(otherName);
@@ -108,11 +137,17 @@ export function nameScore(hfrName: string, otherName: string): number {
     // Names made only of generic words: compare them in full.
     return tokenSetRatio(normalizeName(hfrName, { keepGeneric: true }), normalizeName(otherName, { keepGeneric: true }));
   }
-  return tokenSetRatio(a, b);
+  const score = tokenSetRatio(a, b);
+  const ta = distinctiveTokens(a);
+  const tb = distinctiveTokens(b);
+  if (ta.length === 0 || tb.length === 0) return Math.min(score, MATCH_SCORE - 1);
+  if (!ta.some((x) => tb.some((y) => sameToken(x, y)))) return Math.min(score, 60);
+  return score;
 }
 
 export const MATCH_SCORE = 85;
 /** Name match this close to the HFR point = high confidence; up to MEDIUM_DISTANCE_M = medium; further = low. */
-export const MATCH_DISTANCE_M = 500;
-export const MEDIUM_DISTANCE_M = 1500;
-export const SEARCH_RADIUS_M = 2000;
+export const MATCH_DISTANCE_M = 1000;
+export const MEDIUM_DISTANCE_M = 3500;
+/** Must be at least MEDIUM_DISTANCE_M: matches further than this are never looked for. */
+export const SEARCH_RADIUS_M = 3500;

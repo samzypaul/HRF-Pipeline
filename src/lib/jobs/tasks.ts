@@ -4,7 +4,8 @@ import { env } from "../env";
 import { HfrClient, LIST_PAGE_SIZE } from "../hfr/client";
 import { parseAdminJson, parseCoords, parseDetail, parseListPage, parseRegions, parseServices } from "../hfr/parse";
 import { DETAIL_FIELDS, diffFields, listData, listHash } from "../diff/fields";
-import { hashOf } from "../util";
+import { errorMessage, hashOf } from "../util";
+import { normalizePhone } from "../phone";
 import { validateFacilities } from "../geo/validate";
 import { generateDailyReport } from "../ai/report";
 import { enqueue, incrementCounts, mergeCounts, type RunRow, type TaskRow } from "./queue";
@@ -19,12 +20,40 @@ type Handler = (task: TaskRow, ctx: TaskContext) => Promise<void>;
 const LEVEL_PRIORITY = { 2: 10, 3: 11, 4: 12 } as const;
 
 async function upsertAdmin(level: number, parent: string | null, items: { code: string; name: string }[]) {
-  for (const it of items) {
+  // One statement per 500 rows. A code repeated inside a statement would make Postgres reject it, so the last one wins.
+  const unique = [...new Map(items.map((it) => [it.code, it])).values()];
+  for (let i = 0; i < unique.length; i += 500) {
     await q(sql`
       INSERT INTO admin_units (code, level, name, parent_code, updated_at)
-      VALUES (${it.code}, ${level}, ${it.name}, ${parent}, now())
+      VALUES ${sql.join(unique.slice(i, i + 500).map((it) => sql`(${it.code}, ${level}, ${it.name}, ${parent}, now())`), sql`, `)}
       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, level = EXCLUDED.level,
         parent_code = EXCLUDED.parent_code, updated_at = now()`);
+  }
+}
+
+// ---- Validation while scraping ---------------------------------------------------
+
+const VALIDATE_BATCH_SIZE = 20;
+/** Facilities whose details are saved but not yet queued for validation, per run. Lost on restart; the validate phase picks those up. */
+const validateBuffer = new Map<number, { ward: string | null; codes: string[] }>();
+
+/**
+ * Queue a facility for validation as soon as its details are saved, so the compute lanes validate while the scrape lane
+ * is still fetching. Facilities are grouped by ward (details are queued in ward order) so a batch shares its lookups.
+ */
+async function queueForValidation(runId: number, ward: string | null, code: string) {
+  const buf = validateBuffer.get(runId) ?? { ward, codes: [] };
+  validateBuffer.set(runId, buf);
+  const ready: string[][] = [];
+  if (buf.codes.length && buf.ward !== ward) ready.push(buf.codes.splice(0));
+  buf.ward = ward;
+  buf.codes.push(code);
+  if (buf.codes.length >= VALIDATE_BATCH_SIZE) ready.push(buf.codes.splice(0));
+  if (!ready.length) return;
+  try {
+    await enqueue(runId, "validate_batch", ready.map((codes) => ({ codes })), 50);
+  } catch (e) {
+    console.warn(`[run ${runId}] could not queue early validation: ${errorMessage(e)}`);
   }
 }
 
@@ -155,18 +184,19 @@ const facilityDetail: Handler = async (task, { hfr, run }) => {
 
   const lat = fields.hfr_lat as number | null;
   const lng = fields.hfr_lng as number | null;
-  await q(sql`
+  const [saved] = await q<{ ward_code: string | null }>(sql`
     UPDATE facilities SET
       hfr_id = coalesce(${hfrId}, hfr_id),
       common_name = ${fields.common_name}, date_opened = ${fields.date_opened}, zone = ${fields.zone},
       district_name = ${fields.district_name}, ward_name = ${fields.ward_name}, village_name = ${fields.village_name},
       ownership_details = ${fields.ownership_details}, registration_status = ${fields.registration_status},
-      phone = ${fields.phone}, website = ${fields.website}, nearest_facility = ${fields.nearest_facility},
+      phone = ${fields.phone}, phone_e164 = ${normalizePhone(detail.phone)}, website = ${fields.website}, nearest_facility = ${fields.nearest_facility},
       ctc_id = ${fields.ctc_id}, msd_id = ${fields.msd_id}, mtuha_id = ${fields.mtuha_id},
       hfr_lat = ${lat}, hfr_lng = ${lng},
       geom = ${lat != null && lng != null ? sql`ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)` : sql`NULL`},
       detail_hash = ${detailHash}, last_detail_at = now()
-    WHERE facility_code = ${code}`);
+    WHERE facility_code = ${code}
+    RETURNING ward_code`);
 
   await q(sql`
     INSERT INTO facility_snapshots (run_id, facility_code, data, hash)
@@ -182,6 +212,7 @@ const facilityDetail: Handler = async (task, { hfr, run }) => {
     }
   }
   await incrementCounts(run.id, { details: 1, coordsMissing: coords?.lat == null ? 1 : 0 });
+  await queueForValidation(run.id, saved?.ward_code ?? null, code);
 };
 
 // ---- Validation + report ---------------------------------------------------------
