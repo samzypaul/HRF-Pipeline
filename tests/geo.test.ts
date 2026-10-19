@@ -179,6 +179,26 @@ describe("grade: council, weak names, stand-ins", () => {
     });
     expect(r).toMatchObject({ geocodeSource: "arcgis_geocode", final: { lat: -6.53, lng: 35.14 } });
   });
+  it("grades a same-named place inside the village as high when there is no HFR point", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      relocation: { source: "osm_match", lat: -6.53, lng: 35.14, inWard: true, inVillage: true, confirmed: true, score: 95 },
+    });
+    expect(r).toMatchObject({ confidence: "high", geocodeSource: "osm_match" });
+  });
+  it("keeps a name-matched place outside the village at medium", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      relocation: { source: "osm_match", lat: -6.53, lng: 35.14, inWard: true, inVillage: null, confirmed: true, score: 95 },
+    });
+    expect(r.confidence).toBe("medium");
+  });
   it("falls back to the council centre when there is no village or ward centre", () => {
     const r = grade({
       ...base,
@@ -196,6 +216,12 @@ describe("grade: council, weak names, stand-ins", () => {
 describe("adjustGrade", () => {
   const medium = { confidence: "medium" as const, final: { lat: -6.5, lng: 35.1 }, geocodeSource: "hfr", notes: [] as string[] };
   const none = { village: null, geocoderWardDiffers: false, sharedPoint: false, inWard: true };
+  it("lifts a geocoded point inside its village to high when the reverse geocoder confirms the ward", () => {
+    const geocoded = { ...medium, geocodeSource: "arcgis_geocode" };
+    expect(adjustGrade(geocoded, { ...none, inVillage: true, geocoderWardAgrees: true }).confidence).toBe("high");
+    expect(adjustGrade(geocoded, { ...none, inVillage: true, geocoderWardAgrees: false }).confidence).toBe("medium");
+    expect(adjustGrade(geocoded, { ...none, inVillage: null, geocoderWardAgrees: true }).confidence).toBe("medium");
+  });
   it("village and ward agreeing raises the grade one step", () => {
     expect(adjustGrade(medium, { ...none, village: { check: "agrees", wardDiffers: false } }).confidence).toBe("high");
     expect(adjustGrade({ ...medium, confidence: "low" }, { ...none, village: { check: "agrees", wardDiffers: false } }).confidence).toBe("medium");

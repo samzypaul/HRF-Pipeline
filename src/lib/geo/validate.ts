@@ -319,6 +319,9 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       const inVillageOf = async (lat: number, lng: number): Promise<boolean | null> => (designated ? pointInVillage(designated.id, lat, lng) : null);
       /** A geocoded candidate is only accepted inside the designated village (anywhere when there is none). */
       const inVillageOk = async (lat: number, lng: number) => (await inVillageOf(lat, lng)) !== false;
+      /** Where to search a geocoder: the village polygon's box (a few hundred metres of margin) when known, else the ward, else the council. */
+      const villageBox: BBox | null =
+        designated?.south != null ? pad({ south: designated.south, west: designated.west!, north: designated.north!, east: designated.east! }, 0.004) : null;
       const hfrOutsideVillage = !!hfrPoint && (await inVillageOf(hfrPoint.lat, hfrPoint.lng)) === false;
 
       // 2. OSM name match (free)
@@ -358,7 +361,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         }
         const m = bestMatch(f.name, f.common_name, inWardPlaces);
         if (m && (await inWardOf(m.place.lat, m.place.lng))) {
-          relocation = { source: "osm_match", lat: m.place.lat, lng: m.place.lng, inWard: true, score: m.score, inVillage: await inVillageOf(m.place.lat, m.place.lng) };
+          relocation = { source: "osm_match", lat: m.place.lat, lng: m.place.lng, inWard: true, score: m.score, inVillage: await inVillageOf(m.place.lat, m.place.lng), confirmed: !weakName };
           if (matchSource === "none") {
             matchSource = "osm";
             matchedName = m.place.name;
@@ -382,7 +385,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           }
         }
       } else if (matchSource === "none" && layers.google && googleAvailable) {
-        const area = ward?.bbox ?? (hfrPoint ? boxAround(hfrPoint.lat, hfrPoint.lng, SEARCH_RADIUS_M) : null);
+        const area = villageBox ?? ward?.bbox ?? (hfrPoint ? boxAround(hfrPoint.lat, hfrPoint.lng, SEARCH_RADIUS_M) : null);
         if (area) {
           try {
             const query = [f.name, f.ward_name, f.council_name, "Tanzania"].filter(Boolean).join(", ");
@@ -400,7 +403,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
               }
               if (needsRelocation) {
                 const iw = await inWardOf(g.place.lat, g.place.lng);
-                relocation = { source: "google_match", lat: g.place.lat, lng: g.place.lng, inWard: iw, score: g.score, inVillage: await inVillageOf(g.place.lat, g.place.lng) };
+                relocation = { source: "google_match", lat: g.place.lat, lng: g.place.lng, inWard: iw, score: g.score, inVillage: await inVillageOf(g.place.lat, g.place.lng), confirmed: !weakName };
               }
             }
           } catch (e) {
@@ -419,7 +422,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         const query = [f.name, f.ward_name, f.council_name, "Tanzania"].filter(Boolean).join(", ");
         if (layers.nominatim && Date.now() >= nominatimPausedUntil) {
           try {
-            const nom = await nominatimSearch(query, { viewbox: ward?.bbox ?? council?.bbox });
+            const nom = await nominatimSearch(query, { viewbox: villageBox ?? ward?.bbox ?? council?.bbox });
             for (const p of nom) {
               const iw = await inWardOf(p.lat, p.lng);
               if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
@@ -439,7 +442,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         // Google forward geocoding already has its own layer below, so only MapTiler / ArcGIS are searched here.
         const forwardProviders = providers.filter((p) => (p === "maptiler" || p === "arcgis") && !forwardDown.has(p));
         if (!geocode && forwardProviders.length > 0) {
-          const bbox = ward?.bbox ?? council?.bbox;
+          const bbox = villageBox ?? ward?.bbox ?? council?.bbox;
           const found = await acrossProviders(forwardProviders, (p) => apiCall(() => forwardSearch(p, query, bbox)));
           for (const p of found.unavailable) forwardDown.add(p);
           for (const { provider, error } of found.errors) console.warn(`[validate] ${provider} failed for ${f.facility_code}: ${errorMessage(error)}`);
@@ -544,15 +547,17 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       const sharedPoint = sharedCodes.has(f.facility_code);
       if (sharedPoint) flags.push("shared_point");
       // Village, geocoder and shared-point evidence move the grade one step (see adjustGrade).
+      const finalInVillage = graded.final ? await inVillageOf(graded.final.lat, graded.final.lng) : null;
       const result = adjustGrade(graded, {
         village: village ? { check: village.check, wardDiffers: village.wardDiffers } : null,
         geocoderWardDiffers: wardCheck === "differs",
+        geocoderWardAgrees: wardCheck === "agrees",
+        inVillage: finalInVillage,
         sharedPoint,
         inWard: ward && graded.final ? await inWardOf(graded.final.lat, graded.final.lng) : null,
       });
       // Village containment of the chosen point: "outside_village" = still not in the HFR village, "village_fix" = the village rule
       // produced the point (a geocode inside the village, or the village centre) and management is told about it.
-      const finalInVillage = result.final ? await inVillageOf(result.final.lat, result.final.lng) : null;
       if (finalInVillage === false) {
         flags.push("outside_village");
         result.notes.push(`The point is not inside its HFR village (${designated?.name})`);

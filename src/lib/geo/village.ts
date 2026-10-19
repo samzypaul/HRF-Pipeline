@@ -44,6 +44,11 @@ export interface VillageCandidate {
   region_name: string | null;
   lat: number;
   lng: number;
+  /** bounding box of the polygon, used to confine geocoder searches to the village */
+  south?: number;
+  west?: number;
+  north?: number;
+  east?: number;
 }
 
 /**
@@ -83,7 +88,8 @@ export async function villagesOfWard(hfrWard: string | null): Promise<VillageCan
   if (!key) return [];
   return q<VillageCandidate>(sql`
     SELECT id, name, ward_name, district_name, region_name,
-           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng
+           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng,
+           ST_YMin(geom) AS south, ST_XMin(geom) AS west, ST_YMax(geom) AS north, ST_XMax(geom) AS east
     FROM village_boundaries WHERE regexp_replace(lower(ward_name), '[^a-z0-9]+', '', 'g') = ${key}`);
 }
 

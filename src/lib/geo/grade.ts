@@ -13,6 +13,8 @@ export interface CandidatePoint {
   distanceM?: number;
   /** inside the HFR village polygon (null when the village could not be identified) */
   inVillage?: boolean | null;
+  /** a same-named place (OSM / Google) stands at this point: independent evidence, like a name match near the HFR point */
+  confirmed?: boolean;
 }
 
 export interface GradeInput {
@@ -81,7 +83,7 @@ export function grade(i: GradeInput): GradeResult {
         for (const alt of [i.relocation, i.geocode]) {
           if (alt && alt.inVillage === true && alt.inWard !== false) {
             notes.push(`replacement point from ${alt.source} inside the village`);
-            return { confidence: "medium", final: { lat: alt.lat, lng: alt.lng }, geocodeSource: alt.source, notes };
+            return { confidence: alt.confirmed ? "high" : "medium", final: { lat: alt.lat, lng: alt.lng }, geocodeSource: alt.source, notes };
           }
         }
       }
@@ -120,7 +122,8 @@ export function grade(i: GradeInput): GradeResult {
   for (const alt of [i.relocation, i.geocode]) {
     // With a known village, a point outside it is not used: the village centre below is better.
     if (alt && alt.inVillage !== false && (alt.inWard === true || (alt.inWard === null && !i.hasBoundary))) {
-      const conf: Confidence = alt.inWard ? "medium" : "low";
+      // A same-named place inside the village is as strong as a name match near the HFR point.
+      const conf: Confidence = alt.inWard ? (alt.confirmed && alt.inVillage === true ? "high" : "medium") : "low";
       notes.push(`location from ${alt.source}${alt.inWard ? " inside the ward" : " (no boundary to confirm)"}`);
       return { confidence: conf, final: { lat: alt.lat, lng: alt.lng }, geocodeSource: alt.source, notes };
     }
@@ -145,12 +148,17 @@ export interface GradeEvidence {
   village: { check: "agrees" | "differs" | "unknown"; wardDiffers: boolean } | null;
   /** the reverse geocoder places the final point in a different ward/council than the HFR record */
   geocoderWardDiffers: boolean;
+  /** the final point is inside the village the HFR record names (null when unknown) */
+  inVillage?: boolean | null;
+  /** the reverse geocoder places the final point in the HFR ward */
+  geocoderWardAgrees?: boolean;
   /** another facility has exactly the same HFR coordinates */
   sharedPoint: boolean;
   /** the final point is not inside the ward (null when unknown) */
   inWard: boolean | null;
 }
 
+const GEOCODER_SOURCES = ["nominatim", "maptiler_geocode", "arcgis_geocode", "google_geocode"];
 const ORDER: Confidence[] = ["low", "medium", "high"];
 const shift = (c: Confidence, by: number): Confidence => ORDER[Math.max(0, Math.min(2, ORDER.indexOf(c) + by))];
 
@@ -175,6 +183,9 @@ export function adjustGrade(r: GradeResult, e: GradeEvidence): GradeResult {
   } else if (e.village?.check === "agrees" && e.inWard !== false && r.geocodeSource === "hfr" && !r.notes.some((n) => n.startsWith("HFR point is outside"))) {
     confidence = shift(confidence, 1);
     notes.push("the village polygon under the point matches the HFR village and ward");
+  } else if (GEOCODER_SOURCES.includes(r.geocodeSource ?? "") && e.inVillage === true && e.geocoderWardAgrees && confidence === "medium") {
+    confidence = "high";
+    notes.push("the geocoded point is inside the HFR village and the reverse geocoder confirms the ward");
   }
   if (e.sharedPoint && r.geocodeSource === "hfr") {
     confidence = shift(confidence, -1);
