@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { q } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { leaseInfo } from "@/lib/jobs/queue";
@@ -14,10 +15,11 @@ import {
   suggestWardLinksAction,
   resumeRunAction,
   retryFailedAction,
+  saveAccessAction,
   saveSettingsAction,
   startRunAction,
 } from "../actions";
-import { GEO_LAYER_INFO, WEEKDAYS, getSettings } from "@/lib/settings";
+import { GEO_LAYER_INFO, WEEKDAYS, canManageAccess, getSettings } from "@/lib/settings";
 import { resolveProvider } from "@/lib/geo/provider";
 import HealthCheck from "./HealthCheck";
 import LiveStatus from "./LiveStatus";
@@ -27,6 +29,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const notice = (await searchParams).notice;
+  const canEditAccess = canManageAccess((await headers()).get("x-user-email"));
   const runs = await q<{
     id: number;
     kind: string;
@@ -145,6 +148,47 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </section>
 
       <section className="card">
+        <h2 className="h2 mb-2">Who can sign in</h2>
+        <form action={saveAccessAction} className="grid gap-4 text-sm lg:grid-cols-2">
+          <div className="space-y-2">
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Allowed email addresses (comma-separated or one per line)
+              <textarea
+                className="input"
+                name="accessEmails"
+                rows={5}
+                defaultValue={settings.access.emails.join(", ")}
+                placeholder="name@example.org"
+                disabled={!canEditAccess}
+              />
+            </label>
+            <p className="text-xs text-muted">
+              Each address signs in with a one-time link emailed to it, so only people who can open that mailbox get in. A newly added address
+              receives an email saying it has access, and a removed address is signed out on its next page load. Invalid addresses are dropped when
+              you save. Needs RESEND_API_KEY.
+            </p>
+            <button className="btn btn-primary" disabled={!canEditAccess}>
+              Save and email new addresses
+            </button>
+            {!canEditAccess && <p className="text-xs text-low">Only the owners listed in ALLOWED_EMAILS can change this list.</p>}
+          </div>
+          <div className="space-y-1 text-xs text-muted">
+            <div className="font-semibold text-ink">Owners (ALLOWED_EMAILS, cannot be removed here)</div>
+            {env.allowedEmails.length ? (
+              <ul className="list-disc pl-5">
+                {env.allowedEmails.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>None set: anyone can manage this list (local use).</p>
+            )}
+            <p>Report and approval emails go to the recipients set in the automation settings below.</p>
+          </div>
+        </form>
+      </section>
+
+      <section className="card">
         <h2 className="h2 mb-2">Automation settings</h2>
         <form action={saveSettingsAction} className="grid gap-6 text-sm lg:grid-cols-3">
           <div className="space-y-2">
@@ -216,7 +260,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <input className="input" name="approvalRecipients" defaultValue={settings.approvals.recipients.join(", ")} placeholder="approver@example.org" />
             </label>
             <p className="text-xs text-muted">
-              After each run, new corrected points are emailed once with a link to the review page, where they can be approved in bulk. Needs RESEND_API_KEY.
+              After each run, new corrected points are emailed once with a link to the review page, where they can be approved in bulk. A second email lists the facilities placed inside their HFR village (by a geocoder, or at the village centre when there were no coordinates and geocoding failed). Both go to these recipients. Needs RESEND_API_KEY.
             </p>
           </div>
 

@@ -7,7 +7,7 @@ export interface Filters {
   confidence?: string;
   type?: string;
   q?: string;
-  issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward
+  issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward | outside_village | village_fix
 }
 
 export function readFilters(sp: Record<string, string | string[] | undefined> | URLSearchParams): Filters {
@@ -57,6 +57,12 @@ export function whereFor(f: Filters): SQL {
       break;
     case "no_ward":
       parts.push(sql`f.ward_code IS NULL`);
+      break;
+    case "outside_village":
+      parts.push(sql`'outside_village' = ANY(g.sanity_flags)`);
+      break;
+    case "village_fix":
+      parts.push(sql`'village_fix' = ANY(g.sanity_flags)`);
       break;
     case "shared_point":
       parts.push(sql`'shared_point' = ANY(g.sanity_flags)`);

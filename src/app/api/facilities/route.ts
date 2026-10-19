@@ -28,14 +28,15 @@ function dictionary() {
 }
 
 async function build(filters: ReturnType<typeof readFilters>): Promise<string> {
-  const rows = await q<{ c: string; n: string; t: string | null; conf: string | null; lat: number; lng: number; src: string; ward: string | null; council: string | null; region: string | null }>(sql`
+  const rows = await q<{ c: string; n: string; t: string | null; conf: string | null; lat: number; lng: number; src: string; ward: string | null; village: string | null; council: string | null; region: string | null }>(sql`
     SELECT f.facility_code c, f.name n, f.facility_type t, g.confidence conf,
            coalesce(g.final_lat, f.hfr_lat) lat, coalesce(g.final_lng, f.hfr_lng) lng,
            coalesce(g.geocode_source, 'hfr') src,
-           f.ward_name ward, f.council_name council, f.region_name region
+           f.ward_name ward, f.village_name village, f.council_name council, f.region_name region
     FROM facilities f LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
     WHERE ${whereFor(filters)} AND coalesce(g.final_lat, f.hfr_lat) IS NOT NULL`);
   const wards = dictionary();
+  const villages = dictionary();
   const councils = dictionary();
   const regions = dictionary();
   const types = dictionary();
@@ -43,11 +44,11 @@ async function build(filters: ReturnType<typeof readFilters>): Promise<string> {
   const round = (x: number) => Math.round(Number(x) * 1e5) / 1e5; // ~1 m, plenty for a map
   return JSON.stringify({
     type: "FeatureCollection",
-    lookups: { wards: wards.values, councils: councils.values, regions: regions.values, types: types.values, sources: sources.values },
+    lookups: { wards: wards.values, villages: villages.values, councils: councils.values, regions: regions.values, types: types.values, sources: sources.values },
     features: rows.map((r) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [round(r.lng), round(r.lat)] },
-      properties: { code: r.c, name: r.n, confidence: r.conf ?? "unchecked", t: types.id(r.t), s: sources.id(r.src), w: wards.id(r.ward), cn: councils.id(r.council), r: regions.id(r.region) },
+      properties: { code: r.c, name: r.n, confidence: r.conf ?? "unchecked", t: types.id(r.t), s: sources.id(r.src), w: wards.id(r.ward), v: villages.id(r.village), cn: councils.id(r.council), r: regions.id(r.region) },
     })),
   });
 }

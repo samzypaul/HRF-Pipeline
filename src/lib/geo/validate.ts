@@ -3,7 +3,7 @@ import { q } from "../db/client";
 import { env } from "../env";
 import { createLimiter, errorMessage, haversineM, mapLimit } from "../util";
 import { checkPoint } from "./sanity";
-import { nameScore, nameIsWeak, MATCH_SCORE, SEARCH_RADIUS_M } from "./name-match";
+import { nameScore, nameIsWeak, MATCH_DISTANCE_M, MATCH_SCORE, SEARCH_RADIUS_M } from "./name-match";
 import { overpassHealthPlaces, nominatimSearch, type BBox, type Place } from "./osm";
 import { googleTextSearch, googleGeocode, GoogleUnavailable } from "./google";
 import { adjustGrade, grade, type CandidatePoint } from "./grade";
@@ -12,7 +12,8 @@ import { acrossProviders, forwardSearch, resolveProviders, reverseNames, type Ac
 import { getSettings } from "../settings";
 import { councilPolygon, pointInCouncilPolygon } from "./council";
 import { pointInTanzania } from "./country";
-import { checkVillage, hasVillageBoundaries, villageCentroid, type VillageResult } from "./village";
+import { checkVillage, hasVillageBoundaries, pickVillage, pointInVillage, villagesOfWard, type VillageCandidate, type VillageResult } from "./village";
+import { normAdmin } from "./wards";
 
 interface FacilityRow {
   facility_code: string;
@@ -248,6 +249,8 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
   const forwardDown = new Set<ActiveProvider>();
   const reverseDown = new Set<ActiveProvider>();
   const villagesLoaded = await hasVillageBoundaries();
+  // Village polygons of a ward, loaded once per batch (a batch is normally one ward).
+  const villageRows = new Map<string, Promise<VillageCandidate[]>>();
   // Facilities whose exact HFR coordinates are shared with another active facility.
   const sharedCodes = new Set(
     (
@@ -300,6 +303,24 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       // The polygon (with its edge tolerance) decides; the strict ward-union test is only used when no council file is loaded.
       const hfrOutsideCouncil = !!hfrPoint && (council ? await outsideCouncil(hfrPoint.lat, hfrPoint.lng) : inCouncil === false);
 
+      // The village polygon the HFR record names: every point should end up inside it.
+      let designated: VillageCandidate | null = null;
+      if (villagesLoaded && normAdmin(f.village_name) && normAdmin(f.ward_name)) {
+        const key = f.ward_name!.toLowerCase();
+        let pending = villageRows.get(key);
+        if (!pending) {
+          pending = villagesOfWard(f.ward_name);
+          villageRows.set(key, pending);
+          pending.catch(() => villageRows.delete(key));
+        }
+        designated = pickVillage(await pending, f.village_name, f.ward_name, f.council_name, f.region_name);
+      }
+      /** Inside the designated village; null when the village could not be identified. */
+      const inVillageOf = async (lat: number, lng: number): Promise<boolean | null> => (designated ? pointInVillage(designated.id, lat, lng) : null);
+      /** A geocoded candidate is only accepted inside the designated village (anywhere when there is none). */
+      const inVillageOk = async (lat: number, lng: number) => (await inVillageOf(lat, lng)) !== false;
+      const hfrOutsideVillage = !!hfrPoint && (await inVillageOf(hfrPoint.lat, hfrPoint.lng)) === false;
+
       // 2. OSM name match (free)
       const placesKey = f.council_code ?? `r:${f.region_code}`;
       let pendingPlaces = placesCache.get(placesKey);
@@ -329,7 +350,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         matchDistanceM = Math.round(osmNear.distanceM);
       }
       // A same-named OSM place anywhere in the council can relocate a bad or missing point.
-      const needsRelocation = !hfrPoint || inWard === false || hfrOutsideCouncil;
+      const needsRelocation = !hfrPoint || inWard === false || hfrOutsideCouncil || hfrOutsideVillage;
       if (needsRelocation && ward) {
         const inWardPlaces = [];
         for (const p of places) {
@@ -337,7 +358,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         }
         const m = bestMatch(f.name, f.common_name, inWardPlaces);
         if (m && (await inWardOf(m.place.lat, m.place.lng))) {
-          relocation = { source: "osm_match", lat: m.place.lat, lng: m.place.lng, inWard: true, score: m.score };
+          relocation = { source: "osm_match", lat: m.place.lat, lng: m.place.lng, inWard: true, score: m.score, inVillage: await inVillageOf(m.place.lat, m.place.lng) };
           if (matchSource === "none") {
             matchSource = "osm";
             matchedName = m.place.name;
@@ -379,7 +400,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
               }
               if (needsRelocation) {
                 const iw = await inWardOf(g.place.lat, g.place.lng);
-                relocation = { source: "google_match", lat: g.place.lat, lng: g.place.lng, inWard: iw, score: g.score };
+                relocation = { source: "google_match", lat: g.place.lat, lng: g.place.lng, inWard: iw, score: g.score, inVillage: await inVillageOf(g.place.lat, g.place.lng) };
               }
             }
           } catch (e) {
@@ -391,15 +412,18 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
 
       // 4. Geocode when the HFR point is missing/unusable (or outside its council) and nothing relocated it
       let geocode: CandidatePoint | null = null;
-      if ((!hfrPoint || hfrOutsideCouncil) && !relocation?.inWard) {
+      // A point outside its village is only replaced when a close name match does not confirm it.
+      const confirmed = !!nearMatch && !nearMatch.weak && nearMatch.distanceM <= MATCH_DISTANCE_M;
+      const relocated = !!relocation?.inWard && relocation.inVillage !== false;
+      if ((!hfrPoint || hfrOutsideCouncil || (hfrOutsideVillage && !confirmed)) && !relocated) {
         const query = [f.name, f.ward_name, f.council_name, "Tanzania"].filter(Boolean).join(", ");
         if (layers.nominatim && Date.now() >= nominatimPausedUntil) {
           try {
             const nom = await nominatimSearch(query, { viewbox: ward?.bbox ?? council?.bbox });
             for (const p of nom) {
               const iw = await inWardOf(p.lat, p.lng);
-              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
-                geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw };
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
+                geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
                 break;
               }
             }
@@ -423,8 +447,8 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           search: for (const { provider, value } of found.answers) {
             for (const p of value) {
               const iw = await inWardOf(p.lat, p.lng);
-              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
-                geocode = { source: provider === "arcgis" ? "arcgis_geocode" : "maptiler_geocode", lat: p.lat, lng: p.lng, inWard: iw };
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
+                geocode = { source: provider === "arcgis" ? "arcgis_geocode" : "maptiler_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
                 break search;
               }
             }
@@ -436,8 +460,8 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
             for (const p of res) {
               if (p.kind === "APPROXIMATE" && !ward) continue;
               const iw = await inWardOf(p.lat, p.lng);
-              if (iw !== false && !(await outsideCouncil(p.lat, p.lng))) {
-                geocode = { source: "google_geocode", lat: p.lat, lng: p.lng, inWard: iw };
+              if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
+                geocode = { source: "google_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
                 break;
               }
             }
@@ -451,9 +475,9 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
 
       // Last resorts for a facility with no usable point: the centre of its HFR village, then of its ward.
       let villageStandIn: CandidatePoint | null = null;
-      if (!hfrPoint && !relocation?.inWard && !geocode && villagesLoaded && layers.wardCentroid) {
-        const v = await villageCentroid(f.village_name, f.ward_name, f.council_name, f.region_name);
-        if (v && !(await outsideCouncil(v.lat, v.lng))) villageStandIn = { source: "village_centroid", lat: v.lat, lng: v.lng, inWard: ward ? await inWardOf(v.lat, v.lng) : null };
+      if (!hfrPoint && !relocated && !geocode && designated && layers.wardCentroid) {
+        const v = designated;
+        if (!(await outsideCouncil(v.lat, v.lng))) villageStandIn = { source: "village_centroid", lat: v.lat, lng: v.lng, inWard: ward ? await inWardOf(v.lat, v.lng) : null, inVillage: true };
         if (villageStandIn?.inWard === false) villageStandIn = null;
       }
 
@@ -464,6 +488,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         hasBoundary,
         inWard,
         hfrOutsideCouncil,
+        hfrOutsideVillage,
         nearMatch,
         relocation,
         geocode,
@@ -525,6 +550,15 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         sharedPoint,
         inWard: ward && graded.final ? await inWardOf(graded.final.lat, graded.final.lng) : null,
       });
+      // Village containment of the chosen point: "outside_village" = still not in the HFR village, "village_fix" = the village rule
+      // produced the point (a geocode inside the village, or the village centre) and management is told about it.
+      const finalInVillage = result.final ? await inVillageOf(result.final.lat, result.final.lng) : null;
+      if (finalInVillage === false) {
+        flags.push("outside_village");
+        result.notes.push(`The point is not inside its HFR village (${designated?.name})`);
+      } else if (finalInVillage === true && result.geocodeSource !== "hfr" && result.geocodeSource !== "review") {
+        flags.push("village_fix");
+      }
 
       await q(sql`
         INSERT INTO geo_validation (facility_code, has_boundary, in_ward, in_council, distance_to_ward_m, sanity_flags,

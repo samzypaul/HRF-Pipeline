@@ -139,6 +139,46 @@ describe("grade: council, weak names, stand-ins", () => {
     });
     expect(r).toMatchObject({ confidence: "low", geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
   });
+  it("moves a point outside its village to a geocoded point inside the village", () => {
+    const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true } });
+    expect(r).toMatchObject({ confidence: "medium", geocodeSource: "nominatim", final: { lat: -6.52, lng: 35.12 } });
+  });
+  it("keeps a point outside its village when a close name match confirms it", () => {
+    const r = grade({
+      ...base,
+      hfrOutsideVillage: true,
+      nearMatch: { source: "osm", score: 95, distanceM: 200 },
+      geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "hfr", final: base.hfrPoint });
+  });
+  it("keeps a point outside its village when the geocoded point is not inside the village either", () => {
+    const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: false } });
+    expect(r).toMatchObject({ geocodeSource: "hfr", final: base.hfrPoint });
+    expect(r.notes.join(" ")).toContain("outside its registered village");
+  });
+  it("uses the village centre when the only geocoded point is outside the village", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      geocode: { source: "nominatim", lat: -6.6, lng: 35.2, inWard: true, inVillage: false },
+      villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
+  });
+  it("uses a geocoded point inside the village before the village centre", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      geocode: { source: "arcgis_geocode", lat: -6.53, lng: 35.14, inWard: true, inVillage: true },
+      villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "arcgis_geocode", final: { lat: -6.53, lng: 35.14 } });
+  });
   it("falls back to the council centre when there is no village or ward centre", () => {
     const r = grade({
       ...base,

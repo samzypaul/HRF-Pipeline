@@ -49,6 +49,16 @@ export async function sendLoginEmail(to: string, link: string): Promise<boolean>
   return send([to], "Your HFR Pipeline sign-in link", html);
 }
 
+/** Tell a newly added address it can sign in; the sign-in page then emails it a one-time link. */
+export async function sendAccessEmail(to: string): Promise<boolean> {
+  const link = env.appUrl ? `${env.appUrl}/login` : null;
+  const html = `<div style="font-family:system-ui,sans-serif">
+    <p>You have been given access to the HFR Pipeline dashboard.</p>
+    ${link ? `<p><a href="${link}">Open the sign-in page</a>, enter this email address and we will send you a one-time sign-in link (valid for 15 minutes).</p>` : "<p>Open the dashboard, enter this email address on the sign-in page and we will send you a one-time sign-in link.</p>"}
+    <p style="color:#666">If you were not expecting this, ignore this email.</p></div>`;
+  return send([to], "You can now sign in to the HFR Pipeline", html);
+}
+
 export async function sendMail(to: string[], subject: string, html: string): Promise<boolean> {
   return send(to, subject, html);
 }

@@ -237,6 +237,9 @@ export const geoValidation = pgTable(
     approvalEmailedAt: ts("approval_emailed_at"), // the corrected point below was last emailed for approval
     approvalEmailedLat: doublePrecision("approval_emailed_lat"),
     approvalEmailedLng: doublePrecision("approval_emailed_lng"),
+    villageEmailedAt: ts("village_emailed_at"), // the village-rule point below was last emailed to management
+    villageEmailedLat: doublePrecision("village_emailed_lat"),
+    villageEmailedLng: doublePrecision("village_emailed_lng"),
     wardNameCheck: text("ward_name_check"), // agrees | differs | unknown (reverse-geocoded ward vs HFR ward)
     wardCheckedAt: ts("ward_checked_at"),
     wardCheckLat: doublePrecision("ward_check_lat"),

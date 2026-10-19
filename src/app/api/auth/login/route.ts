@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
+import { allowedLoginEmails } from "@/lib/settings";
 import { linkExpiry, signToken } from "@/lib/auth";
 import { sendLoginEmail } from "@/lib/notify/email";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   back.searchParams.set("sent", "1");
 
   // Same response whether or not the address is allowed, so the list can't be probed.
-  if (email && env.allowedEmails.includes(email)) {
+  if (email && (await allowedLoginEmails()).includes(email)) {
     const token = await signToken({ email, purpose: "link", exp: linkExpiry() }, env.authSecret);
     const base = env.appUrl ?? new URL(req.url).origin;
     const link = `${base}/api/auth/verify?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next.startsWith("/") ? next : "/")}`;

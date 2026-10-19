@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { q } from "./db/client";
+import { env } from "./env";
 import type { GeoProvider } from "./geo/provider";
 
 export type Cadence = "off" | "weekly" | "daily";
@@ -15,6 +16,8 @@ export interface Settings {
   approvals: { emailEnabled: boolean; recipients: string[] };
   /** Who receives the daily and weekly AI reports. Empty = REPORT_RECIPIENTS. */
   reports: { recipients: string[] };
+  /** Extra addresses allowed to sign in (added on the Admin page), on top of the ALLOWED_EMAILS environment variable. */
+  access: { emails: string[] };
   /** Optional location-check layers. Sanity checks and the ward-boundary check always run. */
   geoLayers: { osm: boolean; google: boolean; nominatim: boolean; extraGeocoder: boolean; googleGeocode: boolean; wardCentroid: boolean };
 }
@@ -25,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   geoProvider: "all",
   approvals: { emailEnabled: true, recipients: [] },
   reports: { recipients: [] },
+  access: { emails: [] },
   geoLayers: { osm: true, google: true, nominatim: true, extraGeocoder: true, googleGeocode: true, wardCentroid: true },
 };
 
@@ -87,7 +91,9 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
   const provider = raw?.geoProvider;
   const approvals = (raw?.approvals ?? {}) as Partial<Settings["approvals"]>;
   const reports = (raw?.reports ?? {}) as Partial<Settings["reports"]>;
+  const access = (raw?.access ?? {}) as Partial<Settings["access"]>;
   return {
+    access: { emails: parseEmails(access.emails) },
     reports: { recipients: parseEmails(reports.recipients) },
     approvals: {
       emailEnabled: typeof approvals.emailEnabled === "boolean" ? approvals.emailEnabled : d.approvals.emailEnabled,
@@ -113,6 +119,22 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
 export async function getSettings(): Promise<Settings> {
   const [r] = await q<{ value: Partial<Record<keyof Settings, unknown>> }>(sql`SELECT value FROM app_settings WHERE key = 'settings'`);
   return normalizeSettings(r?.value);
+}
+
+/** Everyone who may sign in: the ALLOWED_EMAILS variable plus the addresses added on the Admin page. */
+export async function allowedLoginEmails(): Promise<string[]> {
+  const fromEnv = env.allowedEmails;
+  try {
+    return [...new Set([...fromEnv, ...(await getSettings()).access.emails])];
+  } catch {
+    return fromEnv; // the database being down must not lock the owners out
+  }
+}
+
+/** Only the owners (ALLOWED_EMAILS) change who can sign in; with none configured (local dev) anyone may. */
+export function canManageAccess(email: string | null | undefined): boolean {
+  const owners = env.allowedEmails;
+  return env.authDisabled || owners.length === 0 || (!!email && owners.includes(email.toLowerCase()));
 }
 
 export async function saveSettings(s: Settings): Promise<void> {

@@ -119,7 +119,7 @@ export default function FacilityMap({ query }: { query: string }) {
 
     type MapData = GeoJSON.FeatureCollection & {
       lookups: Record<
-        "wards" | "councils" | "regions" | "types" | "sources",
+        "wards" | "villages" | "councils" | "regions" | "types" | "sources",
         string[]
       >;
     };
@@ -192,20 +192,18 @@ export default function FacilityMap({ query }: { query: string }) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
 
-    // Click (or tap) a point: the facility name, its ward, council and region, plus the location details.
-    map.on("click", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
-      const f = e.features?.[0];
-      if (!f || f.geometry.type !== "Point") return;
-      const p = f.properties as Record<string, string>;
+    /** Card with the facility name, ward, council and region (plus the location details when `full`). */
+    const card = (p: Record<string, string>, full: boolean) => {
       const el = document.createElement("div");
       el.style.fontSize = "13px";
-      const title = document.createElement("a");
-      title.href = `/facility/${encodeURIComponent(p.code)}`;
+      const title = document.createElement(full ? "a" : "div");
+      if (title instanceof HTMLAnchorElement) title.href = `/facility/${encodeURIComponent(p.code)}`;
       title.textContent = p.name;
       title.style.fontWeight = "600";
       title.style.color = "#0f6e5b";
       el.append(title);
       for (const [label, value] of [
+        ["Village", lookup("villages", p.v)],
         ["Ward", lookup("wards", p.w)],
         ["Council", lookup("councils", p.cn)],
         ["Region", lookup("regions", p.r)],
@@ -214,28 +212,39 @@ export default function FacilityMap({ query }: { query: string }) {
         row.textContent = `${label}: ${value || "—"}`;
         el.append(row);
       }
-      const meta = document.createElement("div");
-      meta.textContent = `${p.code} · ${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
-      meta.style.color = "#5b6573";
-      meta.style.marginTop = "4px";
-      el.append(meta);
+      if (full) {
+        const meta = document.createElement("div");
+        meta.textContent = `${p.code} · ${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
+        meta.style.color = "#5b6573";
+        meta.style.marginTop = "4px";
+        el.append(meta);
+      }
+      return el;
+    };
+    // Hover a point: a small card with its name, ward, council and region. It follows the pointer and never blocks it.
+    const hover = new maplibregl.Popup({ offset: 10, closeButton: false, closeOnClick: false, maxWidth: "300px", className: "facility-hover" });
+    map.on("mousemove", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      if (!f || f.geometry.type !== "Point") return;
+      map.getCanvas().style.cursor = "pointer";
+      hover.setLngLat(f.geometry.coordinates as [number, number]).setDOMContent(card(f.properties as Record<string, string>, false)).addTo(map);
+    });
+    map.on("mouseleave", "facilities", () => {
+      map.getCanvas().style.cursor = "";
+      hover.remove();
+    });
+    // Click (or tap, where there is no hover) a point: the same details plus a link to the facility page.
+    map.on("click", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
+      const f = e.features?.[0];
+      if (!f || f.geometry.type !== "Point") return;
+      hover.remove();
       show(
         new maplibregl.Popup({ offset: 8, maxWidth: "300px" })
           .setLngLat(f.geometry.coordinates as [number, number])
-          .setDOMContent(el)
+          .setDOMContent(card(f.properties as Record<string, string>, true))
           .addTo(map),
       );
     });
-    map.on(
-      "mouseenter",
-      "facilities",
-      () => (map.getCanvas().style.cursor = "pointer"),
-    );
-    map.on(
-      "mouseleave",
-      "facilities",
-      () => (map.getCanvas().style.cursor = ""),
-    );
     return () => map.remove();
   }, [query]);
 

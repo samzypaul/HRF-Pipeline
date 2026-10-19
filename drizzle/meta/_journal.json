@@ -57,6 +57,13 @@
       "when": 1792300052648,
       "tag": "0007_facility_phone_e164",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792411405198,
+      "tag": "0008_village_emails",
+      "breakpoints": true
     }
   ]
 }

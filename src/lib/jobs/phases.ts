@@ -4,6 +4,7 @@ import { applyListDiff } from "../diff/apply";
 import { flagSharedPoints } from "../geo/validate";
 import { matchWards } from "../geo/wards";
 import { notifyPendingCorrections } from "../notify/approvals";
+import { notifyVillagePlacements } from "../notify/villages";
 import { enqueue, failedTaskCount, getRun, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
 
 export const PIPELINES: Record<RunKind, string[]> = {
@@ -197,6 +198,14 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
       } catch (e) {
         console.error(`[run ${run.id}] approval email failed`, e);
         await mergeCounts(run.id, { approvalEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
+      }
+      // Tell management which facilities the village rule placed inside their village. Same rule: never fail the run.
+      try {
+        const v = await notifyVillagePlacements();
+        await mergeCounts(run.id, { villageEmail: v.sent ? `sent (${v.fresh} placed)` : (v.reason ?? "not sent") });
+      } catch (e) {
+        console.error(`[run ${run.id}] village email failed`, e);
+        await mergeCounts(run.id, { villageEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
       }
       // Staging rows are only needed for the diff.
       await q(sql`DELETE FROM list_rows WHERE run_id < ${run.id} - 5`);

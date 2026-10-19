@@ -74,6 +74,28 @@ export function pickVillage(
   return tied ? null : best.r;
 }
 
+/** Points this close to their village's edge count as inside (village files are simplified and their polygons leave small gaps). */
+export const VILLAGE_EDGE_TOLERANCE_M = 100;
+
+/** Every village polygon of a ward (with its centre), for picking the one an HFR record names. Load once per ward and reuse. */
+export async function villagesOfWard(hfrWard: string | null): Promise<VillageCandidate[]> {
+  const key = (hfrWard ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!key) return [];
+  return q<VillageCandidate>(sql`
+    SELECT id, name, ward_name, district_name, region_name,
+           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng
+    FROM village_boundaries WHERE regexp_replace(lower(ward_name), '[^a-z0-9]+', '', 'g') = ${key}`);
+}
+
+/** Is the point inside (or within the edge tolerance of) the village polygon? */
+export async function pointInVillage(id: number, lat: number, lng: number): Promise<boolean> {
+  const [r] = await q<{ inside: boolean }>(sql`
+    WITH p AS (SELECT ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326) AS pt)
+    SELECT (ST_Contains(v.geom, p.pt) OR ST_DWithin(v.geom::geography, p.pt::geography, ${VILLAGE_EDGE_TOLERANCE_M})) AS inside
+    FROM village_boundaries v, p WHERE v.id = ${id}`);
+  return !!r?.inside;
+}
+
 /** Centre of the village polygon the HFR record names, for facilities with no usable point. Null when none can be identified. */
 export async function villageCentroid(
   hfrVillage: string | null,
@@ -82,11 +104,7 @@ export async function villageCentroid(
   hfrRegion: string | null,
 ): Promise<{ lat: number; lng: number; village: string } | null> {
   if (!normAdmin(hfrVillage) || !normAdmin(hfrWard)) return null;
-  const rows = await q<VillageCandidate>(sql`
-    SELECT id, name, ward_name, district_name, region_name,
-           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng
-    FROM village_boundaries WHERE regexp_replace(lower(ward_name), '[^a-z0-9]+', '', 'g') = ${hfrWard!.toLowerCase().replace(/[^a-z0-9]+/g, "")}`);
-  const v = pickVillage(rows, hfrVillage, hfrWard, hfrCouncil, hfrRegion);
+  const v = pickVillage(await villagesOfWard(hfrWard), hfrVillage, hfrWard, hfrCouncil, hfrRegion);
   return v ? { lat: v.lat, lng: v.lng, village: v.name } : null;
 }
 

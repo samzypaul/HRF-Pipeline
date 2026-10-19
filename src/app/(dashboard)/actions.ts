@@ -12,7 +12,8 @@ import { validateFacilities } from "@/lib/geo/validate";
 import { matchWards, setManualWardLink } from "@/lib/geo/wards";
 import { generateDailyReport } from "@/lib/ai/report";
 import { generateWeeklyReport, weekOf } from "@/lib/ai/weekly";
-import { GEO_LAYER_INFO, normalizeSettings, parseEmails, saveSettings } from "@/lib/settings";
+import { GEO_LAYER_INFO, canManageAccess, getSettings, normalizeSettings, parseEmails, saveSettings } from "@/lib/settings";
+import { sendAccessEmail } from "@/lib/notify/email";
 import { approveWardSuggestion, rejectWardSuggestion, suggestWardLinks } from "@/lib/geo/ward-suggest";
 
 const KINDS: RunKind[] = ["full", "pilot", "weekly", "validate", "improve", "report"];
@@ -81,7 +82,9 @@ export async function manualWardLinkAction(form: FormData) {
 
 /** Schedule, daily email and location-check layers from the Admin settings form. */
 export async function saveSettingsAction(form: FormData) {
+  const current = await getSettings();
   const next = normalizeSettings({
+    access: current.access, // edited by its own form
     schedule: { cadence: String(form.get("cadence")), weekday: Number(form.get("weekday")) },
     dailyEmail: { enabled: form.get("dailyEmail") === "on" },
     geoProvider: String(form.get("geoProvider")),
@@ -91,6 +94,26 @@ export async function saveSettingsAction(form: FormData) {
   });
   await saveSettings(next);
   revalidatePath("/admin");
+}
+
+/** Who may sign in (besides the ALLOWED_EMAILS owners). Each newly added address gets an email saying so. */
+export async function saveAccessAction(form: FormData) {
+  const me = (await headers()).get("x-user-email");
+  if (!canManageAccess(me)) redirect("/admin?notice=" + encodeURIComponent("Only the owners listed in ALLOWED_EMAILS can change who can sign in."));
+  const current = await getSettings();
+  const emails = parseEmails(form.get("accessEmails"));
+  await saveSettings({ ...current, access: { emails } });
+  const added = emails.filter((e) => !current.access.emails.includes(e));
+  const failed: string[] = [];
+  for (const e of added) {
+    if (!(await sendAccessEmail(e).catch(() => false))) failed.push(e);
+  }
+  const msg = [
+    `Saved: ${emails.length} extra address${emails.length === 1 ? "" : "es"} can sign in.`,
+    added.length ? ` ${added.length - failed.length} invitation${added.length - failed.length === 1 ? "" : "s"} sent.` : "",
+    failed.length ? ` Could not email ${failed.join(", ")} (check RESEND_API_KEY and REPORT_FROM); they can still sign in.` : "",
+  ].join("");
+  redirect("/admin?notice=" + encodeURIComponent(msg));
 }
 
 /** Ask MapTiler for ward-link suggestions for the next batch of unlinked wards. */

@@ -11,6 +11,8 @@ export interface CandidatePoint {
   inWard: boolean | null;
   score?: number;
   distanceM?: number;
+  /** inside the HFR village polygon (null when the village could not be identified) */
+  inVillage?: boolean | null;
 }
 
 export interface GradeInput {
@@ -20,6 +22,8 @@ export interface GradeInput {
   inWard: boolean | null; // HFR point inside its ward
   /** the HFR point is clearly outside the council polygon (false when there is none to test) */
   hfrOutsideCouncil?: boolean;
+  /** the HFR point is outside the village polygon the record names (false when the village is unknown) */
+  hfrOutsideVillage?: boolean;
   /** best name match near the HFR point (≤ SEARCH_RADIUS_M); weak = the name's distinctive part is under 4 characters */
   nearMatch: { source: "osm" | "google"; score: number; distanceM: number; weak?: boolean } | null;
   /** a matching place elsewhere that could replace a bad / missing HFR point */
@@ -70,6 +74,18 @@ export function grade(i: GradeInput): GradeResult {
       }
       return { confidence: "low", final: i.hfrPoint, geocodeSource: "hfr", notes };
     }
+    if (i.hfrOutsideVillage) {
+      notes.push("HFR point is outside its registered village");
+      // A close name match is evidence the point is right (village files are coarse), so only an unconfirmed point is moved.
+      if (!closeMatch) {
+        for (const alt of [i.relocation, i.geocode]) {
+          if (alt && alt.inVillage === true && alt.inWard !== false) {
+            notes.push(`replacement point from ${alt.source} inside the village`);
+            return { confidence: "medium", final: { lat: alt.lat, lng: alt.lng }, geocodeSource: alt.source, notes };
+          }
+        }
+      }
+    }
     if (i.hasBoundary) {
       if (i.inWard) {
         if (closeMatch) {
@@ -102,7 +118,8 @@ export function grade(i: GradeInput): GradeResult {
 
   notes.push(`HFR point unusable (${i.sanity.flags.join(", ") || "missing"})`);
   for (const alt of [i.relocation, i.geocode]) {
-    if (alt && (alt.inWard === true || (alt.inWard === null && !i.hasBoundary))) {
+    // With a known village, a point outside it is not used: the village centre below is better.
+    if (alt && alt.inVillage !== false && (alt.inWard === true || (alt.inWard === null && !i.hasBoundary))) {
       const conf: Confidence = alt.inWard ? "medium" : "low";
       notes.push(`location from ${alt.source}${alt.inWard ? " inside the ward" : " (no boundary to confirm)"}`);
       return { confidence: conf, final: { lat: alt.lat, lng: alt.lng }, geocodeSource: alt.source, notes };

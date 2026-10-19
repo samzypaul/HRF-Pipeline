@@ -64,6 +64,8 @@ export function FilterBar({
             <option value="no_match">No name match (OSM / Google)</option>
             <option value="shared_point">Shares coordinates with another facility</option>
             <option value="no_ward">No ward assigned</option>
+            <option value="outside_village">Outside its HFR village</option>
+            <option value="village_fix">Placed in its village (geocoded or village centre)</option>
             <option value="low">Low confidence</option>
           </select>
         </label>

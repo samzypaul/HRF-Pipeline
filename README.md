@@ -48,6 +48,25 @@ The distances are `MATCH_DISTANCE_M` (1 km), `MEDIUM_DISTANCE_M` (3.5 km) and `S
 
 HFR's own coordinates are never changed; the corrected point is stored separately (`geo_validation.final_lat/lng`).
 
+### Village rule
+
+Every facility should sit inside the village named in its HFR record (needs the village file from `npm run load-villages`).
+During validation, which every run does, the corrected point is chosen like this:
+
+1. A point that is already inside its village stays.
+2. A point outside its village is replaced by an OSM, Google or geocoder point that is inside the village, unless a close name
+   match confirms the original. If none is found it is kept and flagged **Outside its HFR village** in Data quality.
+3. A facility with no usable point gets a geocoded point inside its village. If geocoding finds nothing inside the village,
+   the centre of the village polygon is used (low confidence).
+
+Placements made by this rule are flagged **Placed in its village**, and management gets one email per run listing them
+(sent to the approval-email recipients). HFR coordinates are never overwritten.
+
+### Who can sign in
+
+`ALLOWED_EMAILS` holds the owners. On the Admin page, owners add more addresses; each new address gets an email saying it has
+access and signs in with a one-time link sent to that mailbox. Removing an address signs it out on its next page load.
+
 ## Setup
 
 ### 1. Install
