@@ -137,7 +137,7 @@ npm run worker -- --start=pilot --region=TZ.SH.KA   # run a pilot from the termi
 ### 6. Deploy to Vercel
 
 1. Push this folder to a GitHub repository and import it in Vercel.
-2. Add the environment variables (Production). Set `APP_URL` to the production URL.
+2. Add the environment variables (Production). Set `APP_URL` to the production URL (`https://hfr-pipeline.vercel.app`); keep `http://localhost:3000` in `.env.local` for local development.
 3. Deploy. `vercel.json` registers two daily cron jobs: the scheduler (23:00 UTC = 02:00 EAT), which starts an automatic run
    when **Admin → Automation settings** says today is a run day (weekly on the chosen weekday, or every day), and a
    watchdog (07:00 EAT) that restarts a stalled run and sends the optional daily status email.

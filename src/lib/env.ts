@@ -40,7 +40,9 @@ export const env = {
   },
   get appUrl(): string | undefined {
     const explicit = read("APP_URL");
-    if (explicit) return explicit.replace(/\/$/, "");
+    // A localhost APP_URL copied from .env.local into Vercel would send every sign-in link to localhost.
+    const onVercel = !!read("VERCEL");
+    if (explicit && !(onVercel && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(explicit))) return explicit.replace(/\/$/, "");
     const prod = read("VERCEL_PROJECT_PRODUCTION_URL");
     if (prod) return `https://${prod}`;
     const url = read("VERCEL_URL");
