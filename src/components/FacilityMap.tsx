@@ -192,6 +192,7 @@ export default function FacilityMap({ query }: { query: string }) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
 
+    // Click (or tap) a point: the facility name, its ward, council and region, plus the location details.
     map.on("click", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
       const f = e.features?.[0];
       if (!f || f.geometry.type !== "Point") return;
@@ -200,49 +201,26 @@ export default function FacilityMap({ query }: { query: string }) {
       el.style.fontSize = "13px";
       const title = document.createElement("a");
       title.href = `/facility/${encodeURIComponent(p.code)}`;
-      title.textContent = `${p.name} (${p.code})`;
+      title.textContent = p.name;
       title.style.fontWeight = "600";
       title.style.color = "#0f6e5b";
-      const meta = document.createElement("div");
-      meta.textContent = `${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
-      meta.style.color = "#5b6573";
-      el.append(title, meta);
-      show(
-        new maplibregl.Popup({ offset: 8 })
-          .setLngLat(f.geometry.coordinates as [number, number])
-          .setDOMContent(el)
-          .addTo(map),
-      );
-    });
-    // Double-click a point: a card with its name, ward, council and region (instead of zooming in).
-    map.on("dblclick", "facilities", (e: maplibregl.MapLayerMouseEvent) => {
-      e.preventDefault();
-      const f = e.features?.[0];
-      if (!f || f.geometry.type !== "Point") return;
-      const p = f.properties as Record<string, string | null>;
-      const el = document.createElement("div");
-      el.style.fontSize = "13px";
-      const name = document.createElement("div");
-      name.textContent = p.name ?? "";
-      name.style.fontWeight = "600";
-      name.style.color = "#0f6e5b";
-      el.append(name);
+      el.append(title);
       for (const [label, value] of [
         ["Ward", lookup("wards", p.w)],
         ["Council", lookup("councils", p.cn)],
         ["Region", lookup("regions", p.r)],
       ] as const) {
         const row = document.createElement("div");
-        row.style.color = "#5b6573";
         row.textContent = `${label}: ${value || "—"}`;
         el.append(row);
       }
+      const meta = document.createElement("div");
+      meta.textContent = `${p.code} · ${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
+      meta.style.color = "#5b6573";
+      meta.style.marginTop = "4px";
+      el.append(meta);
       show(
-        new maplibregl.Popup({
-          offset: 8,
-          closeButton: false,
-          maxWidth: "280px",
-        })
+        new maplibregl.Popup({ offset: 8, maxWidth: "300px" })
           .setLngLat(f.geometry.coordinates as [number, number])
           .setDOMContent(el)
           .addTo(map),

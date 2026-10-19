@@ -16,7 +16,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
       <FilterBar filters={filters} regions={regions} types={types} showIssue />
       <MapClient query={query} />
       <p className="mt-2 text-xs text-muted">
-        Points show the corrected location when one exists, otherwise the HFR coordinates. Click a point for details.
+        Points show the corrected location when one exists, otherwise the HFR coordinates. Click a point to see its name, ward, council and region.
       </p>
     </div>
   );
