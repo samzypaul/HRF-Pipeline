@@ -16,7 +16,7 @@ import { GEO_LAYER_INFO, canManageAccess, getSettings, normalizeSettings, parseE
 import { sendAccessEmail } from "@/lib/notify/email";
 import { approveWardSuggestion, rejectWardSuggestion, suggestWardLinks } from "@/lib/geo/ward-suggest";
 
-const KINDS: RunKind[] = ["full", "pilot", "weekly", "validate", "improve", "report"];
+const KINDS: RunKind[] = ["full", "pilot", "weekly", "validate", "improve", "report", "climate"];
 
 export async function startRunAction(form: FormData) {
   const kind = String(form.get("kind")) as RunKind;

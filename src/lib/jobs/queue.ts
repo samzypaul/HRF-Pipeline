@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 
-export type RunKind = "full" | "pilot" | "weekly" | "validate" | "improve" | "report";
+export type RunKind = "full" | "pilot" | "weekly" | "validate" | "improve" | "report" | "climate";
 
 export interface RunRow {
   id: number;

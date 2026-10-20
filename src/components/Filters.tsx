@@ -1,4 +1,5 @@
 import type { Filters } from "@/lib/data";
+import { SERVICES, TIERS, type Tier } from "@/lib/climate/catalogue";
 
 /** Plain GET form so filters live in the URL (shareable, works without JS). */
 export function FilterBar({
@@ -50,6 +51,24 @@ export function FilterBar({
           <option value="medium">Medium</option>
           <option value="low">Low</option>
           <option value="unchecked">Not checked yet</option>
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
+        Climate-sensitive services
+        <select className="input max-w-64" name="climate" defaultValue={filters.climate ?? ""}>
+          <option value="">Any facility</option>
+          <option value="any">Offers at least one</option>
+          <option value="none">Offers none</option>
+          {([1, 2, 3, 4, 5] as Tier[]).map((t) => (
+            <optgroup key={t} label={`Tier ${t}: ${TIERS[t].en}`}>
+              <option value={`tier:${t}`}>All of tier {t}</option>
+              {SERVICES.filter((x) => x.tier === t).map((x) => (
+                <option key={x.code} value={`svc:${x.code}`}>
+                  {x.nameEn}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         </select>
       </label>
       {showIssue && (

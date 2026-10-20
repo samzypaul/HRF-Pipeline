@@ -62,6 +62,23 @@ During validation, which every run does, the corrected point is chosen like this
 Placements made by this rule are flagged **Placed in its village**, and management gets one email per run listing them
 (sent to the approval-email recipients). HFR coordinates are never overwritten.
 
+### Climate-sensitive services (El Niño app)
+
+A separate way of reading the same data: which facilities offer services that matter for El Niño rains and flooding. The catalogue
+(`src/lib/climate/catalogue.ts`) holds about 50 services in five priority tiers, each with an English and a Kiswahili name and
+description, taken from the team's brainstorm document and dataset prompt. Services the brainstorm names are marked `draft`; services
+found in the registry that it did not name are marked `added` for the team to review. Entries marked `review` need a native-speaker
+health reviewer for the Kiswahili, or a check of how the registry service was matched.
+
+- **Identification.** Each distinct registry service name is matched by its name, not its category (the portal's categories are
+  sometimes wrong, for example nutrition services filed under "Vaccination"). The result is stored in `facility_climate_services`;
+  the catalogue is stored in `climate_services`. Run it from Admin ("Identify climate-sensitive services", no portal calls), with
+  `npx tsx scripts/classify-climate.ts`, or automatically at the end of every full or weekly run.
+- **Filters.** The "Climate-sensitive services" filter works on Data quality, Map and Export: any, none, a whole tier, or chosen services.
+- **Export.** Export has a "Climate-sensitive facility dataset" card that downloads five CSV sheets (UTF-8, snake_case):
+  facilities, facility_services, service_lookup, exclusions and data_quality. Closed or non-operational facilities and facilities without a
+  location are listed in exclusions, not silently dropped; the portal's coordinates are never changed.
+
 ### Who can sign in
 
 `ALLOWED_EMAILS` holds the owners. On the Admin page, owners add more addresses; each new address gets an email saying it has

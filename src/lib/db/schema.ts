@@ -10,6 +10,7 @@ import {
   timestamp,
   jsonb,
   real,
+  smallint,
   primaryKey,
   index,
   uniqueIndex,
@@ -158,6 +159,39 @@ export const facilityServices = pgTable(
     description: text("description").notNull(),
   },
   (t) => [uniqueIndex("facility_services_uq").on(t.facilityCode, t.category, t.description)],
+);
+
+/** The climate-sensitive service catalogue (English and Kiswahili), written from src/lib/climate/catalogue.ts. */
+export const climateServices = pgTable("climate_services", {
+  code: text("code").primaryKey(),
+  tier: smallint("tier").notNull(), // 1 (direct) to 5 (secondary)
+  categoryKey: text("category_key").notNull(),
+  tierEn: text("tier_en").notNull(),
+  tierSw: text("tier_sw").notNull(),
+  categoryEn: text("category_en").notNull(),
+  categorySw: text("category_sw").notNull(),
+  nameEn: text("name_en").notNull(),
+  nameSw: text("name_sw").notNull(),
+  descEn: text("desc_en").notNull(),
+  descSw: text("desc_sw").notNull(),
+  rationale: text("rationale").notNull(),
+  source: text("source").notNull(), // draft | added
+  confidence: text("confidence").notNull(), // high | review (translation or mapping needs a human check)
+  mappingNote: text("mapping_note"),
+  updatedAt: ts("updated_at").defaultNow().notNull(),
+});
+
+/** Which facility offers which climate-sensitive service: derived from facility_services by the climate classifier. */
+export const facilityClimateServices = pgTable(
+  "facility_climate_services",
+  {
+    facilityCode: text("facility_code")
+      .notNull()
+      .references(() => facilities.facilityCode, { onDelete: "cascade" }),
+    serviceCode: text("service_code").notNull(),
+    tier: smallint("tier").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.facilityCode, t.serviceCode] }), index("facility_climate_service_idx").on(t.serviceCode), index("facility_climate_tier_idx").on(t.tier)],
 );
 
 /** Full copy of a facility each time its detail page is fetched. */

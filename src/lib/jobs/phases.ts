@@ -5,6 +5,7 @@ import { flagSharedPoints } from "../geo/validate";
 import { matchWards } from "../geo/wards";
 import { notifyPendingCorrections } from "../notify/approvals";
 import { notifyVillagePlacements } from "../notify/villages";
+import { refreshClimateServices } from "../climate/refresh";
 import { enqueue, failedTaskCount, getRun, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
 
 export const PIPELINES: Record<RunKind, string[]> = {
@@ -14,6 +15,7 @@ export const PIPELINES: Record<RunKind, string[]> = {
   validate: ["validate", "finalize"],
   improve: ["improve", "finalize"],
   report: ["report"],
+  climate: ["climate"],
 };
 
 /** Improve rounds stop after this many passes, or sooner when a pass finds nothing new. */
@@ -207,9 +209,22 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
         console.error(`[run ${run.id}] village email failed`, e);
         await mergeCounts(run.id, { villageEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
       }
+      // Keep the climate-sensitive classification in step with the services just fetched. Never fails the run.
+      try {
+        await mergeCounts(run.id, { climate: await refreshClimateServices() });
+      } catch (e) {
+        console.error(`[run ${run.id}] climate classification failed`, e);
+      }
       // Staging rows are only needed for the diff.
       await q(sql`DELETE FROM list_rows WHERE run_id < ${run.id} - 5`);
       await q(sql`DELETE FROM ward_rows WHERE run_id < ${run.id} - 5`);
+      return 0;
+    }
+
+    case "climate": {
+      // Re-identify the climate-sensitive services of every facility from the services already stored.
+      const c = await refreshClimateServices();
+      await mergeCounts(run.id, { climate: c });
       return 0;
     }
 
