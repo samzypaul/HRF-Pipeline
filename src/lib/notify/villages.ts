@@ -54,7 +54,7 @@ export async function notifyVillagePlacements(): Promise<VillageEmailResult> {
     LIMIT ${LIST_LIMIT}`);
 
   const n = (x: number) => Number(x).toLocaleString("en-US");
-  const base = env.appUrl;
+  const base = env.publicUrl;
   const link = (issue: string, text: string) =>
     base ? `<a href="${base}/quality?issue=${issue}" style="background:#0f766e;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">${text}</a>` : "";
   const line = (r: Row) => `<tr>

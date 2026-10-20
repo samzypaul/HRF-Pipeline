@@ -58,7 +58,7 @@ export async function notifyPendingCorrections(): Promise<ApprovalEmailResult> {
   const [all] = await q<{ n: number }>(sql`
     SELECT count(*)::int n FROM facilities f JOIN geo_validation g ON g.facility_code = f.facility_code WHERE ${PENDING_CORRECTION}`);
 
-  const link = env.appUrl ? `${env.appUrl}/quality?issue=pending_approval` : null;
+  const link = `${env.publicUrl}/quality?issue=pending_approval`;
   const line = (r: Row) => {
     const moved = r.hfr_lat != null && r.hfr_lng != null ? `${Math.round(haversineM(r.hfr_lat, r.hfr_lng, r.final_lat, r.final_lng)).toLocaleString("en-US")} m` : "no HFR point";
     return `<tr>

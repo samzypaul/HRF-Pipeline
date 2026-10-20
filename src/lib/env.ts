@@ -31,6 +31,10 @@ function list(name: string): string[] {
     .filter(Boolean);
 }
 
+const isLocalUrl = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(u);
+/** The deployed dashboard, used for links in emails when nothing better is configured. */
+const DEFAULT_PUBLIC_URL = "https://hfr-pipeline.vercel.app";
+
 export const env = {
   get databaseUrl() {
     return required("DATABASE_URL");
@@ -47,6 +51,16 @@ export const env = {
     if (prod) return `https://${prod}`;
     const url = read("VERCEL_URL");
     return url ? `https://${url}` : undefined;
+  },
+
+  /**
+   * The address to put in links inside emails sent to other people: never localhost, even when the runner or the dashboard is
+   * running on a developer machine whose APP_URL is http://localhost:3000. PUBLIC_APP_URL overrides it.
+   */
+  get publicUrl(): string {
+    const prod = read("VERCEL_PROJECT_PRODUCTION_URL");
+    const hit = [read("PUBLIC_APP_URL"), read("APP_URL"), prod ? `https://${prod}` : undefined].find((u) => u && !isLocalUrl(u));
+    return (hit ?? DEFAULT_PUBLIC_URL).replace(/\/$/, "");
   },
 
   // HFR portal

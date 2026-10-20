@@ -50,7 +50,7 @@ export async function buildStatusEmail(settings: Settings): Promise<{ subject: s
     `<li>#${r.id} ${escapeHtml(r.kind)} — <b>${escapeHtml(r.status)}</b>${r.phase ? ` (phase: ${escapeHtml(r.phase)})` : ""} · tasks ${n(r.done)} done / ${n(r.open)} open / ${n(r.failed)} failed · started ${when(r.started_at)}${r.finished_at ? ` · finished ${when(r.finished_at)}` : ""}${r.error ? `<br><span style="color:#b42318">${escapeHtml(r.error)}</span>` : ""}</li>`;
 
   const needsAttention = open.some((r) => r.status === "paused") || runs[0]?.status === "failed" || Number(failed24?.c) > 0;
-  const link = env.appUrl ? `<p><a href="${env.appUrl}/admin">Open the admin page</a></p>` : "";
+  const link = `<p><a href="${env.publicUrl}/admin">Open the admin page</a></p>`;
   const html = `
     <div style="font-family:system-ui,sans-serif;max-width:640px">
       <h2 style="margin:0 0 12px">HFR pipeline — daily status</h2>

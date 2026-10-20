@@ -24,7 +24,7 @@ export async function sendReportEmail(r: {
   summaryMd: string;
   recommendations?: { title: string; detail: string; priority?: string }[];
 }): Promise<boolean> {
-  const link = env.appUrl ? `${env.appUrl}/reports/${r.id}` : null;
+  const link = `${env.publicUrl}/reports/${r.id}`;
   const recs = r.recommendations?.length
     ? `<h3 style="margin:16px 0 4px">Recommendations</h3><ol>${r.recommendations
         .map((x) => `<li><strong>${escapeHtml(x.title)}</strong>${x.priority ? ` (${escapeHtml(x.priority)})` : ""}: ${escapeHtml(x.detail)}</li>`)
@@ -51,7 +51,7 @@ export async function sendLoginEmail(to: string, link: string): Promise<boolean>
 
 /** Tell a newly added address it can sign in; the sign-in page then emails it a one-time link. */
 export async function sendAccessEmail(to: string): Promise<boolean> {
-  const link = env.appUrl ? `${env.appUrl}/login` : null;
+  const link = `${env.publicUrl}/login`;
   const html = `<div style="font-family:system-ui,sans-serif">
     <p>You have been given access to the HFR Pipeline dashboard.</p>
     ${link ? `<p><a href="${link}">Open the sign-in page</a>, enter this email address and we will send you a one-time sign-in link (valid for 15 minutes).</p>` : "<p>Open the dashboard, enter this email address on the sign-in page and we will send you a one-time sign-in link.</p>"}
