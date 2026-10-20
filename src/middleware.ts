@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifyToken } from "@/lib/auth";
 
-const PUBLIC = [/^\/login/, /^\/api\/auth\//, /^\/api\/cron\//, /^\/api\/jobs\/tick/];
+// /api/v1/climate is the open, read-only API for the public app (it only serves cleaned, climate-sensitive facility data).
+const PUBLIC = [/^\/login/, /^\/api\/auth\//, /^\/api\/cron\//, /^\/api\/jobs\/tick/, /^\/api\/v1\/climate(\/|$)/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

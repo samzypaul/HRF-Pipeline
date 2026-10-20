@@ -80,6 +80,30 @@ health reviewer for the Kiswahili, or a check of how the registry service was ma
   five sheets as CSV (UTF-8, snake_case). The same two files carry the filters chosen above the card. Closed or non-operational facilities and facilities without a
   location are listed in exclusions, not silently dropped; the portal's coordinates are never changed.
 
+### Public API for the app
+
+An open, read-only JSON API for the El Niño app lives at `/api/v1/climate`. It needs no sign-in and serves only cleaned data: facilities
+that are operating, have a location and offer at least one climate-sensitive service (about 13,000), with their phone numbers and their
+services in English or Kiswahili (`lang=en|sw`). Internal fields (review notes, flags, the portal's raw coordinates) are never returned,
+and a stand-in or unconfirmed point is marked `location.approximate`.
+
+| Endpoint | What it returns |
+|---|---|
+| `GET /api/v1/climate/facilities` | A page of facilities. Filters: `service` (codes), `tier` (1 to 5), `region`, `council`, `q` (name), `lat` + `lng` + `radius_km` (nearest first), `min_confidence`, `limit` (up to 200), `offset` |
+| `GET /api/v1/climate/facilities/{code}` | One facility |
+| `GET /api/v1/climate/services` | The services with names, descriptions, tiers and facility counts |
+| `GET /api/v1/climate/regions` | Regions with counts; `?region=CODE` gives that region's councils |
+| `GET /api/v1/climate/openapi.json` | The OpenAPI 3 description, for app developers and API tools |
+
+```bash
+# Facilities within 10 km of a point that do malaria rapid tests, with Kiswahili names
+curl "https://hfr-pipeline.vercel.app/api/v1/climate/facilities?lat=-6.8&lng=39.28&radius_km=10&service=MAL-MRDT&lang=sw"
+```
+
+Responses are cached by the CDN for 5 minutes (30 for services and regions), allow any origin (CORS), and are limited to about 120
+requests a minute per address (a guard per server instance, not a hard quota). Errors are `{ "error": { "code", "message" } }` with status
+400, 404, 429 or 500. Phone numbers are public in this API; remove `phone` from `facilityView` in `src/lib/climate/api.ts` to hide them.
+
 ### Who can sign in
 
 `ALLOWED_EMAILS` holds the owners. On the Admin page, owners add more addresses; each new address gets an email saying it has
