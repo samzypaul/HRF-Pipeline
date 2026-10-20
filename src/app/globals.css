@@ -37,3 +37,6 @@ body {
   .prose-report ol { @apply ml-5 list-decimal; }
   .prose-report p { @apply my-2; }
 }
+
+/* The hover card must not catch the pointer, or it would flicker as the pointer moves onto it. */
+.facility-hover { pointer-events: none; }

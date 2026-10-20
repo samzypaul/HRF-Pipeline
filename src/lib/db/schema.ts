@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -13,6 +14,7 @@ import {
   index,
   uniqueIndex,
   customType,
+  date,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -56,6 +58,36 @@ export const wardBoundaries = pgTable(
   (t) => [index("ward_boundaries_geom_idx").using("gist", t.geom)],
 );
 
+/** Council (LGA) polygons with their district and region, from the national region/district/council file. */
+export const councilBoundaries = pgTable(
+  "council_boundaries",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    districtName: text("district_name"),
+    regionName: text("region_name"),
+    properties: jsonb("properties"),
+    geom: geometry("geom", "MultiPolygon").notNull(),
+  },
+  (t) => [index("council_boundaries_geom_idx").using("gist", t.geom)],
+);
+
+/** Village / mtaa polygons from the national boundary file, with the ward, district and region they belong to. */
+export const villageBoundaries = pgTable(
+  "village_boundaries",
+  {
+    id: serial("id").primaryKey(),
+    sourceId: text("source_id"),
+    name: text("name").notNull(),
+    wardName: text("ward_name"),
+    districtName: text("district_name"),
+    regionName: text("region_name"),
+    properties: jsonb("properties"),
+    geom: geometry("geom", "MultiPolygon").notNull(),
+  },
+  (t) => [index("village_boundaries_geom_idx").using("gist", t.geom)],
+);
+
 /** Links an HFR ward code to a boundary polygon. */
 export const wardCrosswalk = pgTable("ward_crosswalk", {
   wardCode: text("ward_code").primaryKey(),
@@ -90,7 +122,8 @@ export const facilities = pgTable(
     operatingStatus: text("operating_status"),
     registrationStatus: text("registration_status"),
     dateOpened: text("date_opened"),
-    phone: text("phone"),
+    phone: text("phone"), // raw "Official Phone" text from HFR
+    phoneE164: text("phone_e164"), // normalised by src/lib/phone.ts; null when unreadable
     website: text("website"),
     nearestFacility: text("nearest_facility"),
     ctcId: text("ctc_id"),
@@ -118,7 +151,9 @@ export const facilityServices = pgTable(
   "facility_services",
   {
     id: serial("id").primaryKey(),
-    facilityCode: text("facility_code").notNull(),
+    facilityCode: text("facility_code")
+      .notNull()
+      .references(() => facilities.facilityCode, { onDelete: "cascade" }),
     category: text("category").notNull(),
     description: text("description").notNull(),
   },
@@ -194,15 +229,39 @@ export const geoValidation = pgTable(
     osmId: text("osm_id"),
     googlePlaceId: text("google_place_id"),
     googleCheckedAt: ts("google_checked_at"),
-    geocodeSource: text("geocode_source"), // hfr | osm_match | google_match | nominatim | google_geocode | ward_centroid | review
+    geocodeSource: text("geocode_source"), // hfr | osm_match | google_match | nominatim | maptiler_geocode | google_geocode | village_centroid | ward_centroid | council_centroid | review
     finalLat: doublePrecision("final_lat"),
     finalLng: doublePrecision("final_lng"),
     confidence: text("confidence"), // high | medium | low
     notes: text("notes"),
+    approvalEmailedAt: ts("approval_emailed_at"), // the corrected point below was last emailed for approval
+    approvalEmailedLat: doublePrecision("approval_emailed_lat"),
+    approvalEmailedLng: doublePrecision("approval_emailed_lng"),
+    villageEmailedAt: ts("village_emailed_at"), // the village-rule point below was last emailed to management
+    villageEmailedLat: doublePrecision("village_emailed_lat"),
+    villageEmailedLng: doublePrecision("village_emailed_lng"),
+    wardNameCheck: text("ward_name_check"), // agrees | differs | unknown (reverse-geocoded ward vs HFR ward)
+    wardCheckedAt: ts("ward_checked_at"),
+    wardCheckLat: doublePrecision("ward_check_lat"),
+    wardCheckLng: doublePrecision("ward_check_lng"),
+    villageCheck: text("village_check"), // agrees | differs | unknown (village polygon under the final point vs the HFR village)
+    boundaryVillage: text("boundary_village"), // name of the village polygon under the final point
+    boundaryVillageWard: text("boundary_village_ward"), // ward that polygon belongs to
     checkedAt: ts("checked_at").defaultNow().notNull(),
   },
   (t) => [index("geo_validation_conf_idx").on(t.confidence)],
 );
+
+/** Suggested ward ↔ boundary links (from the extra geocoder) waiting for approval on the Admin page. */
+export const wardSuggestions = pgTable("ward_suggestions", {
+  wardCode: text("ward_code").primaryKey(),
+  boundaryId: integer("boundary_id"),
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  query: text("query"),
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | no_result (searched, nothing found)
+  createdAt: ts("created_at").defaultNow().notNull(),
+});
 
 /** Reviewer decisions from the dashboard. Never overwritten by automatic runs. */
 export const reviewDecisions = pgTable("review_decisions", {
@@ -256,6 +315,7 @@ export const runnerLease = pgTable("runner_lease", {
   expiresAt: ts("expires_at"),
 });
 
+/** Legacy per-run reports; superseded by `reports` (rows were copied over by migration 0004). */
 export const weeklyReports = pgTable("weekly_reports", {
   id: serial("id").primaryKey(),
   runId: integer("run_id").notNull().unique(),
@@ -269,6 +329,37 @@ export const weeklyReports = pgTable("weekly_reports", {
   createdAt: ts("created_at").defaultNow().notNull(),
   emailedAt: ts("emailed_at"),
 });
+
+/**
+ * AI reports. kind "daily" = one per pipeline run (period is the EAT day it ran);
+ * kind "weekly" = built from that week's daily reports (period Monday–Sunday, EAT).
+ */
+export const reports = pgTable(
+  "reports",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(), // daily | weekly
+    runId: integer("run_id"), // daily only
+    periodStart: date("period_start", { mode: "string" }).notNull(),
+    periodEnd: date("period_end", { mode: "string" }).notNull(),
+    summaryMd: text("summary_md"),
+    anomalies: jsonb("anomalies"),
+    recommendations: jsonb("recommendations"),
+    reviewList: jsonb("review_list"),
+    digest: jsonb("digest"),
+    sourceReportIds: jsonb("source_report_ids"), // weekly: the daily report ids it combines
+    model: text("model"),
+    verified: boolean("verified").notNull().default(false),
+    verification: jsonb("verification"),
+    createdAt: ts("created_at").defaultNow().notNull(),
+    emailedAt: ts("emailed_at"),
+  },
+  (t) => [
+    uniqueIndex("reports_run_uq").on(t.runId),
+    uniqueIndex("reports_weekly_uq").on(t.periodStart).where(sql`kind = 'weekly'`),
+    index("reports_kind_period_idx").on(t.kind, t.periodStart),
+  ],
+);
 
 export const apiUsage = pgTable(
   "api_usage",
@@ -285,4 +376,11 @@ export const osmCache = pgTable("osm_cache", {
   key: text("key").primaryKey(),
   data: jsonb("data").notNull(),
   fetchedAt: ts("fetched_at").defaultNow().notNull(),
+});
+
+/** Dashboard-editable settings (schedule, email, location-check layers) and small bits of scheduler state. */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: ts("updated_at").defaultNow().notNull(),
 });

@@ -3,7 +3,7 @@ import { sleep } from "../util";
 import { countCall } from "./usage";
 
 export interface Place {
-  source: "osm" | "google" | "nominatim" | "google_geocode";
+  source: "osm" | "google" | "nominatim" | "google_geocode" | "maptiler" | "arcgis";
   id: string;
   name: string;
   lat: number;
@@ -22,18 +22,23 @@ export interface BBox {
 
 const UA = () => `HFR-Pipeline/1.0 (health facility data quality; contact: ${env.nominatimEmail})`;
 
-let lastOverpass = 0;
-let lastNominatim = 0;
+const lastCall = new Map<string, number>();
+const queue = new Map<string, Promise<void>>();
 
-async function spaced(last: number, gapMs: number): Promise<number> {
-  const wait = last + gapMs - Date.now();
-  if (wait > 0) await sleep(wait);
-  return Date.now();
+/** Wait until `gapMs` has passed since the previous call with this name. Callers queue up, so parallel lanes still respect the gap. */
+function spaced(name: string, gapMs: number): Promise<void> {
+  const turn = (queue.get(name) ?? Promise.resolve()).then(async () => {
+    const wait = (lastCall.get(name) ?? 0) + gapMs - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCall.set(name, Date.now());
+  });
+  queue.set(name, turn);
+  return turn;
 }
 
 /** All health-related OSM features inside a bounding box. */
 export async function overpassHealthPlaces(bbox: BBox, fetchImpl: typeof fetch = fetch): Promise<Place[]> {
-  lastOverpass = await spaced(lastOverpass, 2000);
+  await spaced("overpass", 2000);
   const b = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
   const query = `[out:json][timeout:40];
 (
@@ -102,7 +107,7 @@ export async function nominatimSearch(
   query: string,
   opts: { viewbox?: BBox; fetchImpl?: typeof fetch } = {},
 ): Promise<Place[]> {
-  lastNominatim = await spaced(lastNominatim, 1100);
+  await spaced("nominatim", 1100);
   const u = new URL("/search", env.nominatimUrl);
   u.searchParams.set("q", query);
   u.searchParams.set("format", "jsonv2");

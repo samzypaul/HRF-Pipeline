@@ -87,3 +87,16 @@ export function fmtDate(d: string | Date | null | undefined) {
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleString("en-GB", { timeZone: "Africa/Dar_es_Salaam", dateStyle: "medium", timeStyle: "short" });
 }
+
+/** A calendar date (YYYY-MM-DD) as "Tue, 14 Oct 2026". */
+export function fmtDay(d: string) {
+  return new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+
+/** "6 Oct – 12 Oct 2026" for a week (or a single day when start = end). */
+export function fmtPeriod(start: string, end: string) {
+  if (start === end) return fmtDay(start);
+  const f = (d: string, year: boolean) =>
+    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
+  return `${f(start, false)} – ${f(end, true)}`;
+}

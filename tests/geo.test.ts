@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { nameScore, normalizeName, tokenSetRatio } from "@/lib/geo/name-match";
+import { nameScore, nameIsWeak, normalizeName, tokenSetRatio, MATCH_SCORE } from "@/lib/geo/name-match";
 import { checkPoint } from "@/lib/geo/sanity";
-import { grade, type GradeInput } from "@/lib/geo/grade";
+import { adjustGrade, grade, type GradeInput } from "@/lib/geo/grade";
+import { pickVillage } from "@/lib/geo/village";
 import { normAdmin } from "@/lib/geo/wards";
 
 describe("name matching", () => {
@@ -59,8 +60,15 @@ describe("grade", () => {
   it("high: in ward + close name match", () => {
     expect(grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM: 120 } }).confidence).toBe("high");
   });
-  it("medium: in ward, match too far away", () => {
-    expect(grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM: 1500 } }).confidence).toBe("medium");
+  it("high up to 1 km, medium to 3.5 km, low beyond", () => {
+    const at = (distanceM: number) => grade({ ...base, nearMatch: { source: "osm", score: 92, distanceM } }).confidence;
+    expect(at(1000)).toBe("high");
+    expect(at(1001)).toBe("medium");
+    expect(at(3500)).toBe("medium");
+    expect(at(3501)).toBe("low");
+  });
+  it("low: in ward but no name match", () => {
+    expect(grade({ ...base, nearMatch: null }).confidence).toBe("low");
   });
   it("low: outside ward, keeps the HFR point", () => {
     const r = grade({ ...base, inWard: false });
@@ -88,6 +96,169 @@ describe("grade", () => {
   it("reviewer decision always wins", () => {
     const r = grade({ ...base, inWard: false, review: { decision: "manual", lat: -6.6, lng: 35.2 } });
     expect(r).toMatchObject({ confidence: "high", geocodeSource: "review", final: { lat: -6.6, lng: 35.2 } });
+  });
+});
+
+describe("name matching: distinctive words", () => {
+  it("does not match on generic words alone", () => {
+    expect(nameScore("Mission Dispensary", "Mission Hospital")).toBeLessThan(MATCH_SCORE);
+    expect(nameScore("Kati Zahanati", "Kati Clinic")).toBeLessThan(MATCH_SCORE);
+  });
+  it("needs a shared distinctive word", () => {
+    expect(nameScore("Nyakato Mission Dispensary", "Bukoba Mission Dispensary")).toBeLessThan(MATCH_SCORE);
+    expect(nameScore("Nyakato Mission Dispensary", "Nyakato Dispensary")).toBeGreaterThanOrEqual(MATCH_SCORE);
+  });
+  it("flags names whose distinctive part is very short", () => {
+    expect(nameIsWeak("Ido Dispensary")).toBe(true);
+    expect(nameIsWeak("Mission Dispensary")).toBe(true);
+    expect(nameIsWeak("Bahi Dispensary")).toBe(false);
+  });
+});
+
+describe("grade: council, weak names, stand-ins", () => {
+  it("a weak name match cannot reach high", () => {
+    const r = grade({ ...base, nearMatch: { source: "osm", score: 100, distanceM: 100, weak: true } });
+    expect(r.confidence).toBe("medium");
+  });
+  it("low when the HFR point is outside its council", () => {
+    const r = grade({ ...base, hfrOutsideCouncil: true, nearMatch: { source: "osm", score: 92, distanceM: 100 } });
+    expect(r.confidence).toBe("low");
+    expect(r.final).toEqual(base.hfrPoint);
+  });
+  it("a geocoded point inside the council replaces a point outside it", () => {
+    const r = grade({ ...base, hfrOutsideCouncil: true, geocode: { source: "nominatim", lat: -6.5, lng: 35.2, inWard: true } });
+    expect(r).toMatchObject({ confidence: "medium", geocodeSource: "nominatim" });
+  });
+  it("uses the village centre before the ward centre", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true },
+    });
+    expect(r).toMatchObject({ confidence: "low", geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
+  });
+  it("moves a point outside its village to a geocoded point inside the village", () => {
+    const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true } });
+    expect(r).toMatchObject({ confidence: "medium", geocodeSource: "nominatim", final: { lat: -6.52, lng: 35.12 } });
+  });
+  it("keeps a point outside its village when a close name match confirms it", () => {
+    const r = grade({
+      ...base,
+      hfrOutsideVillage: true,
+      nearMatch: { source: "osm", score: 95, distanceM: 200 },
+      geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "hfr", final: base.hfrPoint });
+  });
+  it("keeps a point outside its village when the geocoded point is not inside the village either", () => {
+    const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: false } });
+    expect(r).toMatchObject({ geocodeSource: "hfr", final: base.hfrPoint });
+    expect(r.notes.join(" ")).toContain("outside its registered village");
+  });
+  it("uses the village centre when the only geocoded point is outside the village", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      geocode: { source: "nominatim", lat: -6.6, lng: 35.2, inWard: true, inVillage: false },
+      villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
+  });
+  it("uses a geocoded point inside the village before the village centre", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      geocode: { source: "arcgis_geocode", lat: -6.53, lng: 35.14, inWard: true, inVillage: true },
+      villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true, inVillage: true },
+    });
+    expect(r).toMatchObject({ geocodeSource: "arcgis_geocode", final: { lat: -6.53, lng: 35.14 } });
+  });
+  it("grades a same-named place inside the village as high when there is no HFR point", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      relocation: { source: "osm_match", lat: -6.53, lng: 35.14, inWard: true, inVillage: true, confirmed: true, score: 95 },
+    });
+    expect(r).toMatchObject({ confidence: "high", geocodeSource: "osm_match" });
+  });
+  it("keeps a name-matched place outside the village at medium", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      relocation: { source: "osm_match", lat: -6.53, lng: 35.14, inWard: true, inVillage: null, confirmed: true, score: 95 },
+    });
+    expect(r.confidence).toBe("medium");
+  });
+  it("falls back to the council centre when there is no village or ward centre", () => {
+    const r = grade({
+      ...base,
+      sanity: { flags: ["missing"], usable: false },
+      hfrPoint: null,
+      inWard: null,
+      hasBoundary: false,
+      centroid: null,
+      councilCentroid: { source: "council_centroid", lat: -6.8, lng: 35.4, inWard: null },
+    });
+    expect(r).toMatchObject({ confidence: "low", geocodeSource: "council_centroid", final: { lat: -6.8, lng: 35.4 } });
+  });
+});
+
+describe("adjustGrade", () => {
+  const medium = { confidence: "medium" as const, final: { lat: -6.5, lng: 35.1 }, geocodeSource: "hfr", notes: [] as string[] };
+  const none = { village: null, geocoderWardDiffers: false, sharedPoint: false, inWard: true };
+  it("lifts a geocoded point inside its village to high when the reverse geocoder confirms the ward", () => {
+    const geocoded = { ...medium, geocodeSource: "arcgis_geocode" };
+    expect(adjustGrade(geocoded, { ...none, inVillage: true, geocoderWardAgrees: true }).confidence).toBe("high");
+    expect(adjustGrade(geocoded, { ...none, inVillage: true, geocoderWardAgrees: false }).confidence).toBe("medium");
+    expect(adjustGrade(geocoded, { ...none, inVillage: null, geocoderWardAgrees: true }).confidence).toBe("medium");
+  });
+  it("village and ward agreeing raises the grade one step", () => {
+    expect(adjustGrade(medium, { ...none, village: { check: "agrees", wardDiffers: false } }).confidence).toBe("high");
+    expect(adjustGrade({ ...medium, confidence: "low" }, { ...none, village: { check: "agrees", wardDiffers: false } }).confidence).toBe("medium");
+  });
+  it("does not raise a point outside its ward", () => {
+    expect(adjustGrade(medium, { ...none, inWard: false, village: { check: "agrees", wardDiffers: false } }).confidence).toBe("medium");
+  });
+  it("a village in another ward lowers the grade; with the geocoder disagreeing too it is low", () => {
+    expect(adjustGrade({ ...medium, confidence: "high" }, { ...none, village: { check: "differs", wardDiffers: true } }).confidence).toBe("medium");
+    expect(adjustGrade({ ...medium, confidence: "high" }, { ...none, village: { check: "differs", wardDiffers: true }, geocoderWardDiffers: true }).confidence).toBe("low");
+  });
+  it("a shared point is lowered one step", () => {
+    expect(adjustGrade({ ...medium, confidence: "high" }, { ...none, sharedPoint: true }).confidence).toBe("medium");
+  });
+  it("leaves reviewer decisions and stand-in centres alone", () => {
+    const review = { ...medium, confidence: "high" as const, geocodeSource: "review" };
+    expect(adjustGrade(review, { ...none, sharedPoint: true, geocoderWardDiffers: true })).toBe(review);
+    const stand = { ...medium, confidence: "low" as const, geocodeSource: "village_centroid" };
+    expect(adjustGrade(stand, { ...none, village: { check: "agrees", wardDiffers: false } })).toBe(stand);
+  });
+});
+
+describe("pickVillage", () => {
+  const v = (id: number, name: string, ward: string, district = "Moshi", region = "Kilimanjaro") =>
+    ({ id, name, ward_name: ward, district_name: district, region_name: region, lat: -3.3, lng: 37.3 });
+  it("finds the village in the same ward and region", () => {
+    const rows = [v(1, "Mwika Kati", "Mwika"), v(2, "Kifuni", "Mwika"), v(3, "Kifuni", "Other")];
+    expect(pickVillage(rows, "Kifuni", "Mwika Ward", "Moshi DC", "Kilimanjaro Region")?.id).toBe(2);
+  });
+  it("returns null when the name does not match or the ward is unknown", () => {
+    expect(pickVillage([v(1, "Kifuni", "Mwika")], "Marangu", "Mwika", "Moshi DC", "Kilimanjaro Region")).toBeNull();
+    expect(pickVillage([v(1, "Kifuni", "Mwika")], "Kifuni", null, "Moshi DC", "Kilimanjaro Region")).toBeNull();
+  });
+  it("uses the council to break a tie, and gives up when it cannot", () => {
+    const rows = [v(1, "Kifuni", "Mwika", "Moshi"), v(2, "Kifuni", "Mwika", "Hai")];
+    expect(pickVillage(rows, "Kifuni", "Mwika", "Hai DC", "Kilimanjaro Region")?.id).toBe(2);
+    expect(pickVillage([v(1, "Kifuni", "Mwika", "Moshi"), v(2, "Kifuni", "Mwika", "Moshi")], "Kifuni", "Mwika", "Moshi DC", "Kilimanjaro Region")).toBeNull();
   });
 });
 

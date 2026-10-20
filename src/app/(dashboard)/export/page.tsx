@@ -18,14 +18,21 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a className="btn btn-primary" href={`/api/export?format=csv&${query}`}>
-            Download CSV
+            Facilities CSV
           </a>
           <a className="btn" href={`/api/export?format=geojson&${query}`}>
-            Download GeoJSON
+            Facilities GeoJSON
+          </a>
+          <a className="btn" href={`/api/export?table=services&${query}`}>
+            Services CSV
+          </a>
+          <a className="btn" href={`/api/export?table=validation&${query}`}>
+            Validation CSV
           </a>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Both files include the original HFR coordinates and the corrected point side by side, with the confidence grade, ward
+          <strong>Services</strong> has one row per facility service. <strong>Validation</strong> has the geo-check results only.
+          The facilities files include the original HFR coordinates and the corrected point side by side, with the confidence grade, ward
           check and any reviewer decision, so registry errors can be reported back to the Ministry of Health.
         </p>
       </div>

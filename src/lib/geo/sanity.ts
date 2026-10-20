@@ -13,7 +13,11 @@ export type SanityFlag =
   | "swapped_lat_lng"
   | "outside_tanzania"
   | "low_precision"
-  | "shared_point";
+  | "shared_point"
+  | "geocoder_ward_differs"
+  | "village_ward_differs"
+  | "outside_council"
+  | "weak_name_match";
 
 export interface SanityResult {
   flags: SanityFlag[];

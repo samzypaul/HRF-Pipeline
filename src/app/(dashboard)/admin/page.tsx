@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { q } from "@/lib/db/client";
 import { env } from "@/lib/env";
 import { leaseInfo } from "@/lib/jobs/queue";
@@ -8,17 +9,27 @@ import {
   cancelRunAction,
   kickAction,
   manualWardLinkAction,
+  approveWardSuggestionAction,
   matchWardsAction,
+  rejectWardSuggestionAction,
+  suggestWardLinksAction,
   resumeRunAction,
   retryFailedAction,
+  saveAccessAction,
+  saveSettingsAction,
   startRunAction,
 } from "../actions";
+import { GEO_LAYER_INFO, WEEKDAYS, canManageAccess, getSettings } from "@/lib/settings";
+import { resolveProvider } from "@/lib/geo/provider";
 import HealthCheck from "./HealthCheck";
+import LiveStatus from "./LiveStatus";
 import { HFR_REGIONS } from "@/lib/hfr/regions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const notice = (await searchParams).notice;
+  const canEditAccess = canManageAccess((await headers()).get("x-user-email"));
   const runs = await q<{
     id: number;
     kind: string;
@@ -56,6 +67,20 @@ export default async function AdminPage() {
     WHERE w.level = 4 AND NOT EXISTS (SELECT 1 FROM ward_crosswalk x WHERE x.ward_code = w.code)
     ORDER BY w.code LIMIT 25`);
   const usage = await q<{ provider: string; calls: number }>(sql`SELECT provider, calls FROM api_usage WHERE month = ${monthKey()} ORDER BY provider`);
+  const settings = await getSettings();
+  const providerReady = resolveProvider(settings.geoProvider) != null;
+  const suggestions = await q<{ ward_code: string; boundary_id: number; ward: string | null; council: string | null; boundary: string; boundary_district: string | null }>(sql`
+    SELECT s.ward_code, s.boundary_id, w.name ward, c.name council, b.name boundary, b.district_name boundary_district
+    FROM ward_suggestions s
+    JOIN ward_boundaries b ON b.id = s.boundary_id
+    LEFT JOIN admin_units w ON w.code = s.ward_code
+    LEFT JOIN admin_units c ON c.code = w.parent_code
+    WHERE s.status = 'pending' ORDER BY s.ward_code LIMIT 50`);
+  const [wardCheck] = await q<{ differs: number; unknown: number; agrees: number }>(sql`
+    SELECT count(*) FILTER (WHERE ward_name_check = 'differs')::int differs,
+           count(*) FILTER (WHERE ward_name_check = 'unknown')::int unknown,
+           count(*) FILTER (WHERE ward_name_check = 'agrees')::int agrees
+    FROM geo_validation`);
   const lease = await leaseInfo();
   const ticking = lease?.expires_at && new Date(lease.expires_at).getTime() > Date.now();
 
@@ -66,6 +91,10 @@ export default async function AdminPage() {
           <button className="btn">Nudge runner</button>
         </form>
       </PageHeader>
+
+      {notice && <div className="card border-low text-sm">{notice}</div>}
+
+      <LiveStatus />
 
       <section className="grid gap-4 lg:grid-cols-3">
         <div className="card">
@@ -78,13 +107,14 @@ export default async function AdminPage() {
           <form action={startRunAction} className="space-y-2 text-sm">
             <div className="flex flex-wrap gap-2">
               <select className="input" name="kind" defaultValue="pilot">
-                <option value="pilot">Pilot (one region)</option>
-                <option value="full">Full national load</option>
+                <option value="pilot">Pilot (one region, no improve step)</option>
+                <option value="full">Full load (all regions, or the one chosen)</option>
                 <option value="weekly">Weekly check now</option>
+                <option value="improve">Improve data quality (repeats until located)</option>
                 <option value="validate">Re-validate all locations</option>
               </select>
               <select className="input" name="region" defaultValue="">
-                <option value="">Region (pilot only)</option>
+                <option value="">All regions (whole country)</option>
                 {regions.map((r) => (
                   <option key={r.code} value={r.code}>
                     {r.name}
@@ -99,9 +129,9 @@ export default async function AdminPage() {
         <div className="card">
           <h2 className="h2 mb-2">API usage this month</h2>
           <ul className="space-y-1 text-sm">
-            {["google_places", "google_geocode", "overpass", "nominatim", "gemini"].map((p) => {
+            {["google_places", "google_geocode", "maptiler", "arcgis", "overpass", "nominatim", "gemini"].map((p) => {
               const n = Number(usage.find((u) => u.provider === p)?.calls ?? 0);
-              const cap = p === "google_places" ? env.googlePlacesMonthlyCap : p === "google_geocode" ? env.googleGeocodeMonthlyCap : null;
+              const cap = p === "google_places" ? env.googlePlacesMonthlyCap : p === "google_geocode" ? env.googleGeocodeMonthlyCap : p === "maptiler" ? env.maptilerMonthlyCap : p === "arcgis" ? env.arcgisMonthlyCap : null;
               return (
                 <li key={p} className="flex justify-between">
                   <span>{p}</span>
@@ -115,6 +145,165 @@ export default async function AdminPage() {
           </ul>
           <p className="mt-2 text-xs text-muted">Google stops being called when its cap is reached, keeping usage in the free tier.</p>
         </div>
+      </section>
+
+      <section className="card">
+        <h2 className="h2 mb-2">Who can sign in</h2>
+        <form action={saveAccessAction} className="grid gap-4 text-sm lg:grid-cols-2">
+          <div className="space-y-2">
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Allowed email addresses (comma-separated or one per line)
+              <textarea
+                className="input"
+                name="accessEmails"
+                rows={5}
+                defaultValue={settings.access.emails.join(", ")}
+                placeholder="name@example.org"
+                disabled={!canEditAccess}
+              />
+            </label>
+            <p className="text-xs text-muted">
+              Each address signs in with a one-time link emailed to it, so only people who can open that mailbox get in. A newly added address
+              receives an email saying it has access, and a removed address is signed out on its next page load. Invalid addresses are dropped when
+              you save. Needs RESEND_API_KEY.
+            </p>
+            <button className="btn btn-primary" disabled={!canEditAccess}>
+              Save and email new addresses
+            </button>
+            {!canEditAccess && <p className="text-xs text-low">Only the owners listed in ALLOWED_EMAILS can change this list.</p>}
+          </div>
+          <div className="space-y-1 text-xs text-muted">
+            <div className="font-semibold text-ink">Owners (ALLOWED_EMAILS, cannot be removed here)</div>
+            {env.allowedEmails.length ? (
+              <ul className="list-disc pl-5">
+                {env.allowedEmails.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>None set: anyone can manage this list (local use).</p>
+            )}
+            <p>Report and approval emails go to the recipients set in the automation settings below.</p>
+          </div>
+        </form>
+      </section>
+
+      <section className="card">
+        <h2 className="h2 mb-2">Automation settings</h2>
+        <form action={saveSettingsAction} className="grid gap-6 text-sm lg:grid-cols-3">
+          <div className="space-y-2">
+            <h3 className="font-semibold">Automatic runs</h3>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              How often
+              <select className="input" name="cadence" defaultValue={settings.schedule.cadence}>
+                <option value="weekly">Once a week</option>
+                <option value="daily">Every day</option>
+                <option value="off">Off (manual runs only)</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Day of the week (used when weekly)
+              <select className="input" name="weekday" defaultValue={settings.schedule.weekday}>
+                {WEEKDAYS.map((d, i) => (
+                  <option key={d} value={i}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Start no earlier than (East Africa Time)
+              <select className="input" name="hour" defaultValue={settings.schedule.hour}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, "0")}:00
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-xs text-muted">
+              Runs are started by the hourly GitHub worker (and the daily Vercel cron at 02:00) on the chosen day, from the chosen hour, at most once a day.
+              Daily runs check the whole registry every day but refresh
+              facility details more slowly, so the portal sees about the same load.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-semibold">Daily status email</h3>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="dailyEmail" defaultChecked={settings.dailyEmail.enabled} />
+              Email the current status every morning
+            </label>
+            <p className="text-xs text-muted">
+              Sent around 07:00 East Africa Time to REPORT_RECIPIENTS: running and last finished runs, failures, confidence levels and API
+              usage. Needs RESEND_API_KEY.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-semibold">Report emails</h3>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Send the daily and weekly reports to (comma-separated; empty = REPORT_RECIPIENTS)
+              <textarea
+                className="input"
+                name="reportRecipients"
+                rows={3}
+                defaultValue={settings.reports.recipients.join(", ")}
+                placeholder="name@example.org, other@example.org"
+              />
+            </label>
+            <p className="text-xs text-muted">
+              {settings.reports.recipients.length
+                ? `Currently ${settings.reports.recipients.length} address${settings.reports.recipients.length === 1 ? "" : "es"}.`
+                : "Currently using the REPORT_RECIPIENTS environment variable."}{" "}
+              Invalid addresses are dropped when you save. Needs RESEND_API_KEY.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-semibold">Approval emails</h3>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" name="approvalEmail" defaultChecked={settings.approvals.emailEnabled} />
+              Email corrected locations that need approval
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Send to (comma-separated; empty = the report recipients)
+              <input className="input" name="approvalRecipients" defaultValue={settings.approvals.recipients.join(", ")} placeholder="approver@example.org" />
+            </label>
+            <p className="text-xs text-muted">
+              After each run, new corrected points are emailed once with a link to the review page, where they can be approved in bulk. A second email lists the facilities placed inside their HFR village (by a geocoder, or at the village centre when there were no coordinates and geocoding failed). Both go to these recipients. Needs RESEND_API_KEY.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="font-semibold">Location check layers</h3>
+            <p className="text-xs text-muted">Sanity checks and the ward-boundary check always run. Switch off the rest to save quota or test their effect.</p>
+            {GEO_LAYER_INFO.map((l) => (
+              <label key={l.key} className="flex items-start gap-2">
+                <input type="checkbox" className="mt-1" name={`layer_${l.key}`} defaultChecked={settings.geoLayers[l.key]} />
+                <span>
+                  {l.label}
+                  <span className="block text-xs text-muted">{l.hint}</span>
+                </span>
+              </label>
+            ))}
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Extra geocoder provider
+              <select className="input" name="geoProvider" defaultValue={settings.geoProvider}>
+                <option value="all">All at once (MapTiler, ArcGIS and Google: every one that has a key)</option>
+                <option value="auto">Automatic (MapTiler, else Google, else ArcGIS, whichever has a key)</option>
+                <option value="maptiler">MapTiler (MAPTILER_API_KEY)</option>
+                <option value="google">Google (GOOGLE_MAPS_API_KEY, counts toward the Geocoding cap)</option>
+                <option value="arcgis">ArcGIS (ARCGIS_API_KEY)</option>
+              </select>
+            </label>
+            <p className="text-xs text-muted">Applies to facilities checked from now on. Run “Re-validate all locations” to apply it everywhere.</p>
+          </div>
+
+          <div className="lg:col-span-3">
+            <button className="btn btn-primary">Save settings</button>
+          </div>
+        </form>
       </section>
 
       <section className="card overflow-x-auto p-0">
@@ -157,6 +346,12 @@ export default async function AdminPage() {
                     {diff.seen != null && <>seen {fmt(diff.seen)} · new {fmt(diff.new)} · </>}
                     {c.details != null && <>details {fmt(c.details)} · </>}
                     {c.validated != null && <>validated {fmt(c.validated)}</>}
+                    {c.improveRound != null && (
+                      <>
+                        {" "}· improve round {fmt(c.improveRound)} · still without location {fmt(c.improveRemaining)}
+                        {c.improveStopped ? ` (${c.improveStopped})` : ""}
+                      </>
+                    )}
                   </td>
                   <td className="text-xs">{fmtDate(r.started_at)}</td>
                   <td>
@@ -226,6 +421,38 @@ export default async function AdminPage() {
             </label>
             <button className="btn">Link manually</button>
           </form>
+        </div>
+        <div className="mt-3 border-t border-line pt-3 text-sm">
+          <h3 className="font-semibold">Geocoder checks</h3>
+          <p className="text-xs text-muted">
+            Ward name of each point (reverse geocoding): {fmt(wardCheck?.agrees ?? 0)} agree · {fmt(wardCheck?.differs ?? 0)} differ (flagged{" "}
+            <code>geocoder_ward_differs</code>) · {fmt(wardCheck?.unknown ?? 0)} unknown.
+          </p>
+          <form action={suggestWardLinksAction} className="mt-2">
+            <button className="btn" disabled={!providerReady}>
+              Suggest links for unlinked wards (25 at a time)
+            </button>
+            {!providerReady && <span className="ml-2 text-xs text-muted">Set MAPTILER_API_KEY, GOOGLE_MAPS_API_KEY or ARCGIS_API_KEY for the chosen provider.</span>}
+          </form>
+          {suggestions.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs">
+              {suggestions.map((s) => (
+                <li key={s.ward_code} className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {s.ward_code} {s.ward} ({s.council}) → boundary #{s.boundary_id} “{s.boundary}”{s.boundary_district ? `, ${s.boundary_district}` : ""}
+                  </span>
+                  <form action={approveWardSuggestionAction}>
+                    <input type="hidden" name="wardCode" value={s.ward_code} />
+                    <button className="btn px-2 py-1 text-xs">Approve</button>
+                  </form>
+                  <form action={rejectWardSuggestionAction}>
+                    <input type="hidden" name="wardCode" value={s.ward_code} />
+                    <button className="btn px-2 py-1 text-xs">Reject</button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         {unmatched.length > 0 && (
           <details className="mt-3 text-xs">

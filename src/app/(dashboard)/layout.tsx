@@ -1,17 +1,22 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { env } from "@/lib/env";
+import { allowedLoginEmails } from "@/lib/settings";
 
 const NAV = [
   { href: "/", label: "Overview" },
   { href: "/map", label: "Map" },
   { href: "/quality", label: "Data quality" },
-  { href: "/reports", label: "Weekly reports" },
+  { href: "/reports", label: "Reports" },
   { href: "/export", label: "Export" },
   { href: "/admin", label: "Admin" },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const email = (await headers()).get("x-user-email");
+  // Sessions last 30 days, so an address removed on the Admin page is signed out here rather than waiting for its cookie to expire.
+  if (email && !env.authDisabled && !(await allowedLoginEmails()).includes(email.toLowerCase())) redirect("/login?error=" + encodeURIComponent("This address no longer has access"));
   return (
     <div className="min-h-screen">
       <header className="border-b border-line bg-panel">

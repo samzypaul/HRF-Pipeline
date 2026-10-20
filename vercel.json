@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
   "crons": [
-    { "path": "/api/cron/weekly", "schedule": "0 23 * * 0" },
+    { "path": "/api/cron/schedule", "schedule": "0 23 * * *" },
     { "path": "/api/cron/watchdog", "schedule": "0 4 * * *" }
   ],
   "functions": {

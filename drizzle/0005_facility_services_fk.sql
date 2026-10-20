@@ -1,0 +1,2 @@
+DELETE FROM "facility_services" WHERE "facility_code" NOT IN (SELECT "facility_code" FROM "facilities");--> statement-breakpoint
+ALTER TABLE "facility_services" ADD CONSTRAINT "facility_services_facility_code_facilities_facility_code_fk" FOREIGN KEY ("facility_code") REFERENCES "public"."facilities"("facility_code") ON DELETE cascade ON UPDATE no action;

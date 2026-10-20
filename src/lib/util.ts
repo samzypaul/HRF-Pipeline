@@ -25,6 +25,43 @@ export function hashOf(value: unknown): string {
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Run `fn` over `items` with at most `limit` in flight. Stops starting new items after the first failure,
+ * waits for the ones already running, then throws that first failure.
+ */
+export async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let failure: { error: unknown } | null = null;
+  const worker = async () => {
+    while (!failure && next < items.length) {
+      const item = items[next++];
+      try {
+        await fn(item);
+      } catch (error) {
+        failure ??= { error };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  if (failure) throw (failure as { error: unknown }).error;
+}
+
+/** A counting semaphore: `limiter(fn)` runs `fn` once fewer than `limit` calls are in flight. */
+export function createLimiter(limit: number): <T>(fn: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      waiting.shift()?.();
+    }
+  };
+}
+
 export function monthKey(d = new Date()): string {
   return d.toISOString().slice(0, 7);
 }
