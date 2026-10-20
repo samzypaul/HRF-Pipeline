@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -91,6 +91,14 @@ if (ARCGIS_KEY) {
 
 type BasemapKey = keyof typeof BASEMAPS;
 
+interface FacilityHit {
+  code: string;
+  name: string;
+  lng: number;
+  lat: number;
+  confidence: string;
+}
+
 /** All facilities as points coloured by confidence, over a choice of base maps (no API key needed). */
 export default function FacilityMap({ query }: { query: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -100,6 +108,20 @@ export default function FacilityMap({ query }: { query: string }) {
   const appliedRef = useRef<BasemapKey>(basemap); // base map the current map instance was built with
   const [count, setCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tally, setTally] = useState<Record<string, number>>({});
+  const [index, setIndex] = useState<FacilityHit[]>([]);
+  const [search, setSearch] = useState("");
+  const focusRef = useRef<((code: string) => void) | null>(null);
+  const hits = useMemo(() => {
+    const t = search.trim().toLowerCase();
+    if (t.length < 2) return [];
+    const out: FacilityHit[] = [];
+    for (const h of index) {
+      if (h.name.toLowerCase().includes(t) || h.code.toLowerCase().startsWith(t)) out.push(h);
+      if (out.length >= 8) break;
+    }
+    return out;
+  }, [index, search]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -188,6 +210,16 @@ export default function FacilityMap({ query }: { query: string }) {
       .then((d) => {
         data = d;
         setCount(d.features.length);
+        const counts: Record<string, number> = {};
+        const list: FacilityHit[] = [];
+        for (const f of d.features) {
+          if (f.geometry.type !== "Point") continue;
+          const p = f.properties as Record<string, string>;
+          counts[p.confidence] = (counts[p.confidence] ?? 0) + 1;
+          list.push({ code: p.code, name: p.name, lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], confidence: p.confidence });
+        }
+        setTally(counts);
+        setIndex(list);
         addFacilities();
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
@@ -245,7 +277,19 @@ export default function FacilityMap({ query }: { query: string }) {
           .addTo(map),
       );
     });
-    return () => map.remove();
+    // Search result chosen: fly to the facility and open its full card.
+    focusRef.current = (code: string) => {
+      const f = data?.features.find((x) => (x.properties as Record<string, string>).code === code);
+      if (!f || f.geometry.type !== "Point") return;
+      const at = f.geometry.coordinates as [number, number];
+      hover.remove();
+      map.flyTo({ center: at, zoom: Math.max(map.getZoom(), 14), essential: true });
+      show(new maplibregl.Popup({ offset: 8, maxWidth: "300px" }).setLngLat(at).setDOMContent(card(f.properties as Record<string, string>, true)).addTo(map));
+    };
+    return () => {
+      focusRef.current = null;
+      map.remove();
+    };
   }, [query]);
 
   // Switching base map keeps the view; the points are re-added when the new style has loaded.
@@ -256,14 +300,50 @@ export default function FacilityMap({ query }: { query: string }) {
     mapRef.current?.setStyle(BASEMAPS[basemap].style);
   }, [basemap]);
 
+  const total = count ?? 0;
   return (
     <div className="relative">
+      <div ref={ref} className="h-[calc(100vh-15rem)] min-h-[460px] w-full overflow-hidden rounded-xl border border-line shadow-card" />
+
+      <div className="absolute left-3 top-3 w-72 max-w-[calc(100%-1.5rem)]">
+        <input
+          className="input w-full shadow-card"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Find a facility by name or code"
+          aria-label="Find a facility"
+          autoComplete="off"
+        />
+        {hits.length > 0 && (
+          <ul className="mt-1 overflow-hidden rounded-lg border border-line bg-white shadow-lg">
+            {hits.map((h) => (
+              <li key={h.code}>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-canvas"
+                  onClick={() => {
+                    focusRef.current?.(h.code);
+                    setSearch("");
+                  }}
+                >
+                  <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS[h.confidence] ?? COLORS.unchecked }} aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{h.name}</span>
+                    <span className="block text-xs text-muted">{h.code}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {search.trim().length >= 2 && hits.length === 0 && index.length > 0 && (
+          <div className="mt-1 rounded-lg border border-line bg-white px-3 py-2 text-sm text-muted shadow-lg">No facility on the map matches.</div>
+        )}
+      </div>
+
       <div
-        ref={ref}
-        className="h-[70vh] w-full overflow-hidden rounded-lg border border-line"
-      />
-      <div
-        className="absolute left-3 top-3 flex overflow-hidden rounded-md border border-line bg-white/95 text-xs shadow"
+        className="absolute right-14 top-3 flex overflow-hidden rounded-lg border border-line bg-white/95 text-xs shadow-card"
         role="radiogroup"
         aria-label="Base map"
       >
@@ -274,23 +354,22 @@ export default function FacilityMap({ query }: { query: string }) {
             role="radio"
             aria-checked={basemap === k}
             onClick={() => setBasemap(k)}
-            className={`px-3 py-1.5 font-medium ${basemap === k ? "bg-brand text-white" : "text-ink hover:bg-canvas"}`}
+            className={`px-3 py-1.5 font-medium transition-colors ${basemap === k ? "bg-brand text-white" : "text-ink hover:bg-canvas"}`}
           >
             {BASEMAPS[k].label}
           </button>
         ))}
       </div>
-      <div className="absolute bottom-3 left-3 rounded-md bg-white/95 px-3 py-2 text-xs shadow">
-        <div className="mb-1 font-semibold">
-          {count == null ? "Loading…" : `${count.toLocaleString()} facilities`}
-        </div>
-        {Object.entries(COLORS).map(([k, c]) => (
-          <div key={k} className="flex items-center gap-2">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ background: c }}
-            />
-            {k}
+
+      <div className="absolute bottom-6 left-3 min-w-48 rounded-xl border border-line bg-white/95 px-3.5 py-3 text-xs shadow-card">
+        <div className="mb-2 font-semibold">{count == null ? "Loading facilities…" : `${total.toLocaleString()} facilities`}</div>
+        {(["high", "medium", "low", "unchecked"] as const).map((k) => (
+          <div key={k} className="flex items-center justify-between gap-4 py-0.5">
+            <span className="flex items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: COLORS[k] }} aria-hidden />
+              <span className="capitalize">{k === "unchecked" ? "not checked" : k}</span>
+            </span>
+            <span className="tabular-nums text-muted">{(tally[k] ?? 0).toLocaleString()}</span>
           </div>
         ))}
         {error && <div className="mt-1 text-low">{error}</div>}

@@ -15,12 +15,12 @@ export function FilterBar({
   extra?: React.ReactNode;
 }) {
   return (
-    <form className="card mb-4 flex flex-wrap items-end gap-3" method="get">
-      <label className="flex flex-col gap-1 text-xs text-muted">
+    <form className="card mb-5 flex flex-wrap items-end gap-3 p-4" method="get">
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
         Search
         <input className="input w-56" name="q" defaultValue={filters.q} placeholder="Name or facility code" />
       </label>
-      <label className="flex flex-col gap-1 text-xs text-muted">
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
         Region
         <select className="input" name="region" defaultValue={filters.region ?? ""}>
           <option value="">All regions</option>
@@ -31,7 +31,7 @@ export function FilterBar({
           ))}
         </select>
       </label>
-      <label className="flex flex-col gap-1 text-xs text-muted">
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
         Facility type
         <select className="input max-w-56" name="type" defaultValue={filters.type ?? ""}>
           <option value="">All types</option>
@@ -42,7 +42,7 @@ export function FilterBar({
           ))}
         </select>
       </label>
-      <label className="flex flex-col gap-1 text-xs text-muted">
+      <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
         Confidence
         <select className="input" name="confidence" defaultValue={filters.confidence ?? ""}>
           <option value="">Any</option>
@@ -53,7 +53,7 @@ export function FilterBar({
         </select>
       </label>
       {showIssue && (
-        <label className="flex flex-col gap-1 text-xs text-muted">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Issue
           <select className="input" name="issue" defaultValue={filters.issue ?? ""}>
             <option value="">Any</option>
@@ -74,6 +74,9 @@ export function FilterBar({
       <button className="btn btn-primary" type="submit">
         Apply
       </button>
+      <a className="btn border-transparent bg-transparent shadow-none" href="?">
+        Reset
+      </a>
     </form>
   );
 }

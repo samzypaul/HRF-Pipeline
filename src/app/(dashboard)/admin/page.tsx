@@ -86,7 +86,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Admin">
+      <PageHeader title="Admin" subtitle="Start and watch runs, set the schedule and who can sign in, and link ward boundaries.">
         <form action={kickAction}>
           <button className="btn">Nudge runner</button>
         </form>
@@ -96,7 +96,24 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       <LiveStatus />
 
-      <section className="grid gap-4 lg:grid-cols-3">
+      <nav
+        aria-label="Admin sections"
+        className="sticky top-[3.75rem] z-20 flex gap-1 overflow-x-auto rounded-xl border border-line bg-panel/90 p-1 text-sm shadow-card backdrop-blur"
+      >
+        {[
+          ["#start", "Start a run"],
+          ["#access", "Who can sign in"],
+          ["#automation", "Automation"],
+          ["#runs", "Runs"],
+          ["#wards", "Ward boundaries"],
+        ].map(([href, label]) => (
+          <a key={href} href={href} className="whitespace-nowrap rounded-lg px-3 py-1.5 font-medium text-muted hover:bg-canvas hover:text-ink">
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <section id="start" className="grid scroll-mt-32 gap-4 lg:grid-cols-3">
         <div className="card">
           <h2 className="h2 mb-2">1. Portal reachability</h2>
           <p className="mb-2 text-xs text-muted">Checks that this deployment can fetch the HFR facility list.</p>
@@ -147,8 +164,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </div>
       </section>
 
-      <section className="card">
-        <h2 className="h2 mb-2">Who can sign in</h2>
+      <section id="access" className="card scroll-mt-32">
+        <h2 className="h2 mb-3">Who can sign in</h2>
         <form action={saveAccessAction} className="grid gap-4 text-sm lg:grid-cols-2">
           <div className="space-y-2">
             <label className="flex flex-col gap-1 text-xs text-muted">
@@ -188,8 +205,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </form>
       </section>
 
-      <section className="card">
-        <h2 className="h2 mb-2">Automation settings</h2>
+      <section id="automation" className="card scroll-mt-32">
+        <h2 className="h2 mb-3">Automation settings</h2>
         <form action={saveSettingsAction} className="grid gap-6 text-sm lg:grid-cols-3">
           <div className="space-y-2">
             <h3 className="font-semibold">Automatic runs</h3>
@@ -306,8 +323,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </form>
       </section>
 
-      <section className="card overflow-x-auto p-0">
-        <h2 className="h2 px-4 pt-4">Runs</h2>
+      <section id="runs" className="card scroll-mt-32 overflow-x-auto p-0">
+        <h2 className="h2 px-5 pt-5">Runs</h2>
         <table className="table mt-2">
           <thead>
             <tr>
@@ -395,8 +412,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         )}
       </section>
 
-      <section className="card">
-        <h2 className="h2 mb-2">Ward boundaries</h2>
+      <section id="wards" className="card scroll-mt-32">
+        <h2 className="h2 mb-3">Ward boundaries</h2>
         <p className="text-sm">
           {fmt(wardStats?.boundaries ?? 0)} boundary polygons loaded · {fmt(wardStats?.linked ?? 0)} of {fmt(wardStats?.wards ?? 0)} HFR wards
           linked ({fmt(wardStats?.manual ?? 0)} manual).

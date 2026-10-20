@@ -12,7 +12,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
   const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v) as [string, string][]).toString();
   return (
     <div>
-      <PageHeader title="Map" />
+      <PageHeader title="Map" subtitle="Every facility at its corrected location, coloured by how sure the pipeline is." />
       <FilterBar filters={filters} regions={regions} types={types} showIssue />
       <MapClient query={query} />
       <p className="mt-2 text-xs text-muted">
