@@ -64,6 +64,13 @@
       "when": 1792411405198,
       "tag": "0008_village_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792509267484,
+      "tag": "0009_climate_services",
+      "breakpoints": true
     }
   ]
 }

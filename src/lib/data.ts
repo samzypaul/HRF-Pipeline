@@ -7,6 +7,8 @@ export interface Filters {
   confidence?: string;
   type?: string;
   q?: string;
+  /** climate-sensitive services: any | none | tier:1,2 | svc:CODE,CODE */
+  climate?: string;
   issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward | outside_village | village_fix
 }
 
@@ -16,7 +18,7 @@ export function readFilters(sp: Record<string, string | string[] | undefined> | 
     const s = Array.isArray(v) ? v[0] : v;
     return s && s.trim() ? s.trim() : undefined;
   };
-  return { region: get("region"), council: get("council"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue") };
+  return { region: get("region"), council: get("council"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue"), climate: get("climate") };
 }
 
 /**
@@ -29,6 +31,24 @@ export const PENDING_CORRECTION = sql`(
   AND NOT EXISTS (SELECT 1 FROM review_decisions rd WHERE rd.facility_code = f.facility_code)
 )`;
 
+/**
+ * Facilities that offer climate-sensitive services (uses alias f). "any" = at least one, "none" = none,
+ * "tier:1,2" = at least one in those tiers, "svc:MAL-MRDT,ANC" = at least one of those services.
+ */
+export function climatePredicate(value: string): SQL {
+  const has = (extra: SQL) => sql`EXISTS (SELECT 1 FROM facility_climate_services cs WHERE cs.facility_code = f.facility_code ${extra})`;
+  if (value === "none") return sql`NOT ${has(sql``)}`;
+  if (value.startsWith("tier:")) {
+    const tiers = value.slice(5).split(",").map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 5);
+    return tiers.length ? has(sql`AND cs.tier = ANY(${sql.param(tiers)}::smallint[])`) : has(sql``);
+  }
+  if (value.startsWith("svc:")) {
+    const codes = value.slice(4).split(",").map((c) => c.trim()).filter((c) => /^[A-Z0-9-]{2,20}$/.test(c));
+    return codes.length ? has(sql`AND cs.service_code = ANY(${sql.param(codes)}::text[])`) : has(sql``);
+  }
+  return has(sql``);
+}
+
 export function whereFor(f: Filters): SQL {
   const parts: SQL[] = [sql`f.removed_at IS NULL`];
   if (f.region) parts.push(sql`f.region_code = ${f.region}`);
@@ -36,6 +56,7 @@ export function whereFor(f: Filters): SQL {
   if (f.type) parts.push(sql`f.facility_type = ${f.type}`);
   if (f.confidence) parts.push(f.confidence === "unchecked" ? sql`g.confidence IS NULL` : sql`g.confidence = ${f.confidence}`);
   if (f.q) parts.push(sql`(f.name ILIKE ${"%" + f.q + "%"} OR f.facility_code ILIKE ${f.q + "%"} OR f.common_name ILIKE ${"%" + f.q + "%"})`);
+  if (f.climate) parts.push(climatePredicate(f.climate));
   switch (f.issue) {
     case "needs_review":
       parts.push(sql`g.confidence IS DISTINCT FROM 'high'`);
