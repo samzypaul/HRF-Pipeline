@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { CATEGORIES, SERVICES, SERVICE_BY_CODE, TIERS, UNMATCHED, type Tier } from "@/lib/climate/catalogue";
 import { classifyService } from "@/lib/climate/classify";
 import { climatePredicate, readFilters } from "@/lib/data";
+import { chosenServices, paramsFrom } from "@/lib/climate/dataset";
 
 const codes = (category: string, description: string) =>
   classifyService(category, description)
@@ -94,6 +95,25 @@ describe("classifyService (real portal service names)", () => {
     expect(codes("General Clinical Services", "OPD - Outpatient Services")).toEqual([]);
     expect(codes("Therapeutics", "Pharmacy")).toEqual([]);
     expect(codes("Optometry Services", "Refraction")).toEqual([]);
+  });
+});
+
+describe("climate dataset parameters", () => {
+  it("keeps the operating and located checks on for a plain link", () => {
+    const p = paramsFrom(new URL("http://x/api/export/climate?sheet=facilities"));
+    expect(p.operatingOnly).toBe(true);
+    expect(p.locatedOnly).toBe(true);
+  });
+  it("turns a check off only when the form posted a hidden 0 without a ticked 1", () => {
+    expect(paramsFrom(new URL("http://x/?operating=0")).operatingOnly).toBe(false);
+    expect(paramsFrom(new URL("http://x/?operating=0&operating=1")).operatingOnly).toBe(true);
+    expect(paramsFrom(new URL("http://x/?located=0")).locatedOnly).toBe(false);
+  });
+  it("narrows the services to the chosen tier or codes, else uses all", () => {
+    expect(chosenServices(undefined).codes).toHaveLength(SERVICES.length);
+    expect(chosenServices("svc:ANC,DENGUE").codes).toEqual(["ANC", "DENGUE"]);
+    expect(chosenServices("tier:5").codes).toEqual(["ORAL"]);
+    expect(chosenServices("svc:NOPE").codes).toHaveLength(SERVICES.length);
   });
 });
 
