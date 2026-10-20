@@ -22,7 +22,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <PageHeader title="Data quality review" subtitle={<>{fmt(total)} {total === 1 ? "facility matches" : "facilities match"} the filters. Approve a corrected point, keep the portal's, or set one by hand.</>}>
+      <PageHeader title="Data quality review" subtitle={<>{fmt(total)} {total === 1 ? "facility matches" : "facilities match"} the filters. Approve a corrected point, keep the portal&apos;s, or set one by hand.</>}>
         <form action={startImproveAction}>
           <button className="btn btn-primary" title="Re-checks weak locations and keeps geocoding until every facility has a point">
             Improve data quality
