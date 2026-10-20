@@ -66,7 +66,7 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
         {(["region", "council", "confidence", "type", "q", "issue", "climate"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
         <CardHeader
           title="Climate-sensitive facility dataset"
-          hint="For the El Niño climate-adapted health facility app: facilities offering climate-sensitive services, each service in English and Kiswahili, five CSV sheets."
+          hint="For the El Niño climate-adapted health facility app: facilities offering climate-sensitive services, each service in English and Kiswahili, one Excel workbook or five CSV sheets."
         />
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg bg-brand-soft/60 p-3">
@@ -105,10 +105,14 @@ export default async function ExportPage({ searchParams }: { searchParams: Promi
           &ldquo;Climate-sensitive services&rdquo; above to export only those.
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {SHEETS.map((s, i) => (
-            <button key={s.sheet} className={`btn ${i === 0 ? "btn-primary" : ""}`} name="sheet" value={s.sheet} title={s.note}>
-              {s.label} CSV
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button className="btn btn-primary" name="sheet" value="workbook" title="One Excel file: a summary and the five sheets">
+            Excel workbook (.xlsx)
+          </button>
+          <span className="mx-1 text-xs text-faint">or one sheet as CSV:</span>
+          {SHEETS.map((s) => (
+            <button key={s.sheet} className="btn" name="sheet" value={s.sheet} title={s.note}>
+              {s.label}
             </button>
           ))}
         </div>

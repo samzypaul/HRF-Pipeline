@@ -75,8 +75,9 @@ health reviewer for the Kiswahili, or a check of how the registry service was ma
   the catalogue is stored in `climate_services`. Run it from Admin ("Identify climate-sensitive services", no portal calls), with
   `npx tsx scripts/classify-climate.ts`, or automatically at the end of every full or weekly run.
 - **Filters.** The "Climate-sensitive services" filter works on Data quality, Map and Export: any, none, a whole tier, or chosen services.
-- **Export.** Export has a "Climate-sensitive facility dataset" card that downloads five CSV sheets (UTF-8, snake_case):
-  facilities, facility_services, service_lookup, exclusions and data_quality. Closed or non-operational facilities and facilities without a
+- **Export.** Export has a "Climate-sensitive facility dataset" card. It downloads one Excel workbook (a Summary sheet, then
+  Facilities, Facility_Services, Service_Lookup, Exclusions and Data_Quality; no merged cells, one header row each), or any one of the
+  five sheets as CSV (UTF-8, snake_case). The same two files carry the filters chosen above the card. Closed or non-operational facilities and facilities without a
   location are listed in exclusions, not silently dropped; the portal's coordinates are never changed.
 
 ### Who can sign in
