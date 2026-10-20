@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FilterBar } from "@/components/Filters";
-import { ConfidenceBadge, PageHeader, Pagination, fmt } from "@/components/ui";
+import { ConfidenceBadge, Empty, PageHeader, Pagination, fmt } from "@/components/ui";
 import { filterOptions, listFacilities, readFilters } from "@/lib/data";
 import { bulkReviewAction, reviewAction, startImproveAction } from "../actions";
 import SelectAll from "./SelectAll";
@@ -22,7 +22,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
 
   return (
     <div>
-      <PageHeader title="Data quality review">
+      <PageHeader title="Data quality review" subtitle={<>{fmt(total)} {total === 1 ? "facility matches" : "facilities match"} the filters. Approve a corrected point, keep the portal's, or set one by hand.</>}>
         <form action={startImproveAction}>
           <button className="btn btn-primary" title="Re-checks weak locations and keeps geocoding until every facility has a point">
             Improve data quality
@@ -35,15 +35,15 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
       <FilterBar filters={filters} regions={regions} types={types} showIssue />
 
       {done != null && Number.isFinite(done) && (
-        <div className="card mb-3 border-brand text-sm">
+        <div className="card mb-4 border-brand/40 bg-brand-soft/50 py-3 text-sm">
           Applied to {fmt(done)} {done === 1 ? "facility" : "facilities"}
           {skipped > 0 && <>; {fmt(skipped)} skipped (already decided, or no point to apply)</>}.
         </div>
       )}
 
-      <form id="bulk" action={bulkReviewAction} className="card mb-3 flex flex-wrap items-end gap-3 text-sm">
+      <form id="bulk" action={bulkReviewAction} className="card mb-5 flex flex-wrap items-end gap-3 p-4 text-sm">
         {(["region", "council", "confidence", "type", "q", "issue"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
-        <label className="flex flex-col gap-1 text-xs text-muted">
+        <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Apply to several facilities at once
           <select className="input" name="decision" defaultValue="accept_corrected">
             <option value="accept_corrected">Use the corrected point</option>
@@ -84,8 +84,8 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-muted">
-                  Nothing matches these filters.
+                <td colSpan={6}>
+                  <Empty title="Nothing matches these filters.">Try Reset, or choose a different issue.</Empty>
                 </td>
               </tr>
             )}
@@ -95,7 +95,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                   {!r.decision && <input type="checkbox" name="codes" form="bulk" value={r.facility_code} aria-label={`Select ${r.name}`} />}
                 </td>
                 <td>
-                  <Link className="font-medium text-brand hover:underline" href={`/facility/${r.facility_code}`}>
+                  <Link className="link" href={`/facility/${r.facility_code}`}>
                     {r.name}
                   </Link>
                   <div className="text-xs text-muted">
@@ -123,7 +123,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                   )}
                   {r.final_lat != null && (
                     <a
-                      className="ml-1 text-muted underline"
+                      className="link ml-1 text-xs"
                       target="_blank"
                       rel="noreferrer"
                       href={`https://www.openstreetmap.org/?mlat=${r.final_lat}&mlon=${r.final_lng}#map=16/${r.final_lat}/${r.final_lng}`}
@@ -136,8 +136,8 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                   {r.decision ? (
                     <form action={reviewAction} className="text-xs">
                       <input type="hidden" name="code" value={r.facility_code} />
-                      <span className="badge bg-brand-soft text-brand">{r.decision.replace("_", " ")}</span>
-                      <button className="ml-2 underline" name="decision" value="clear">
+                      <span className="badge badge-dot bg-brand-soft text-brand">{r.decision.replace("_", " ")}</span>
+                      <button className="link ml-2 text-xs" name="decision" value="clear">
                         undo
                       </button>
                     </form>
@@ -145,21 +145,21 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                     <form action={reviewAction} className="flex flex-wrap items-center gap-1 text-xs">
                       <input type="hidden" name="code" value={r.facility_code} />
                       {r.hfr_lat != null && (
-                        <button className="btn px-2 py-1 text-xs" name="decision" value="accept_hfr">
+                        <button className="btn btn-sm" name="decision" value="accept_hfr">
                           HFR is right
                         </button>
                       )}
                       {r.final_lat != null && (r.geocode_source !== "hfr" || r.final_lat !== r.hfr_lat || r.final_lng !== r.hfr_lng) && (
-                        <button className="btn px-2 py-1 text-xs" name="decision" value="accept_corrected">
+                        <button className="btn btn-sm" name="decision" value="accept_corrected">
                           Use corrected
                         </button>
                       )}
                       <details className="w-full">
-                        <summary className="cursor-pointer text-muted">Set manually</summary>
+                        <summary className="cursor-pointer font-medium text-muted hover:text-ink">Set manually</summary>
                         <div className="mt-1 flex gap-1">
                           <input className="input w-24 text-xs" name="lat" placeholder="lat" />
                           <input className="input w-24 text-xs" name="lng" placeholder="lng" />
-                          <button className="btn px-2 py-1 text-xs" name="decision" value="manual">
+                          <button className="btn btn-sm" name="decision" value="manual">
                             Save
                           </button>
                         </div>

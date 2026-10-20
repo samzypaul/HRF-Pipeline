@@ -3,15 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { env } from "@/lib/env";
 import { allowedLoginEmails } from "@/lib/settings";
-
-const NAV = [
-  { href: "/", label: "Overview" },
-  { href: "/map", label: "Map" },
-  { href: "/quality", label: "Data quality" },
-  { href: "/reports", label: "Reports" },
-  { href: "/export", label: "Export" },
-  { href: "/admin", label: "Admin" },
-];
+import NavLinks from "@/components/NavLinks";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const email = (await headers()).get("x-user-email");
@@ -19,30 +11,28 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (email && !env.authDisabled && !(await allowedLoginEmails()).includes(email.toLowerCase())) redirect("/login?error=" + encodeURIComponent("This address no longer has access"));
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-panel">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2 font-semibold text-brand">
-            <span className="inline-block h-3 w-3 rounded-full bg-brand" aria-hidden />
+      <header className="sticky top-0 z-30 border-b border-line bg-panel/85 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-ink">
+            <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden>
+              <rect width="26" height="26" rx="7" fill="var(--color-brand)" />
+              <path d="M13 5.5c-3.3 0-6 2.6-6 5.9 0 4.3 6 9.1 6 9.1s6-4.8 6-9.1c0-3.3-2.7-5.9-6-5.9Z" fill="none" stroke="#fff" strokeWidth="1.6" />
+              <path d="M13 8.9v4.4M10.8 11.1h4.4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
             HFR Pipeline
           </Link>
-          <nav className="flex flex-wrap gap-1 text-sm">
-            {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="rounded-md px-2.5 py-1.5 text-muted hover:bg-canvas hover:text-ink">
-                {n.label}
-              </Link>
-            ))}
-          </nav>
+          <NavLinks />
           <div className="ml-auto flex items-center gap-3 text-xs text-muted">
-            {email && <span>{email}</span>}
+            {email && <span className="hidden rounded-full bg-canvas px-2.5 py-1 sm:inline">{email}</span>}
             {email && (
               <form action="/api/auth/logout" method="post">
-                <button className="underline">Sign out</button>
+                <button className="rounded-lg px-2 py-1 font-medium hover:bg-canvas hover:text-ink">Sign out</button>
               </form>
             )}
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
     </div>
   );
 }

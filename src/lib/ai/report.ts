@@ -133,8 +133,11 @@ const DAILY_SYSTEM = `You write the daily data-quality report for Tanzania's Hea
 ${RULES}
 - Keep it short and useful for MoH staff deciding what to check today.`;
 
-/** Generate (or regenerate) the daily report for one pipeline run, email it, and refresh the weekly roll-ups. */
-export async function generateDailyReport(runId: number) {
+/**
+ * Generate (or regenerate) the daily report for one pipeline run, email it, and refresh the weekly roll-ups.
+ * With `notify: false` the report is only stored: nothing is emailed and the weekly roll-up is left alone (used to backfill old days).
+ */
+export async function generateDailyReport(runId: number, opts: { notify?: boolean } = {}) {
   const digest = await buildDigest(runId);
   const day = eatDay(new Date(digest.run.started_at)).date;
   const ai = await writeReport(DAILY_SYSTEM, `Digest for run ${runId} (${day}):
@@ -153,12 +156,13 @@ ${JSON.stringify(digest, null, 2)}`, () => fallbackSummary(digest));
     RETURNING id`);
 
   // Only a report whose numbers all check out is emailed.
-  if (verification.ok) {
+  if (opts.notify !== false && verification.ok) {
     const sent = await sendReportEmail({ id: row.id, title: `HFR daily report — ${day}`, summaryMd: ai.summary, recommendations: ai.recommendations as Recommendation[] });
     if (sent) await q(sql`UPDATE reports SET emailed_at = now() WHERE id = ${row.id}`);
   }
 
   // A weekly report is written once its week is complete (and refreshed on Sunday).
+  if (opts.notify === false) return { id: row.id, verification };
   try {
     await ensureWeeklyReports(day);
   } catch (e) {
