@@ -1,0 +1,81 @@
+# Runs the pipeline worker (scripts/worker.ts) on GitHub's servers, so scraping and validation continue without the
+# dashboard or your own computer. All state lives in Postgres: a job that is stopped or times out is resumed by the next one.
+#
+#   - every hour it starts the scheduled run when the Admin schedule says it is due, then works through the queue and exits
+#     straight away when there is nothing to do
+#   - "Run workflow" starts a run by hand (full load, weekly check, re-validation, improve)
+#   - only one worker runs at a time (the concurrency group here, and the database lease inside the worker)
+name: Pipeline worker
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      start:
+        description: Start a new run before working (none = just work through what is queued)
+        type: choice
+        options: [none, full, weekly, validate, improve, pilot]
+        default: none
+      region:
+        description: Region code for a pilot or full load, e.g. TZ.CL.DO (empty = whole country)
+        required: false
+
+concurrency:
+  group: hfr-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    # GitHub stops a job at 6 hours; the worker stops itself a little earlier (WORKER_MAX_MINUTES) and the next job resumes.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Work through the queue
+        env:
+          START: ${{ inputs.start }}
+          REGION: ${{ inputs.region }}
+          WORKER_MAX_MINUTES: "335"
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          APP_URL: ${{ secrets.APP_URL }}
+          PUBLIC_APP_URL: ${{ secrets.PUBLIC_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          HFR_BASE_URL: ${{ secrets.HFR_BASE_URL }}
+          HFR_CONTACT_EMAIL: ${{ secrets.HFR_CONTACT_EMAIL }}
+          HFR_RATE_MS: ${{ secrets.HFR_RATE_MS }}
+          HFR_FETCH_SERVICES: ${{ secrets.HFR_FETCH_SERVICES }}
+          HFR_TIMEOUT_MS: ${{ secrets.HFR_TIMEOUT_MS }}
+          DETAIL_REFRESH_FRACTION: ${{ secrets.DETAIL_REFRESH_FRACTION }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MONTHLY_CAP: ${{ secrets.GOOGLE_MONTHLY_CAP }}
+          GOOGLE_GEOCODE_MONTHLY_CAP: ${{ secrets.GOOGLE_GEOCODE_MONTHLY_CAP }}
+          ARCGIS_API_KEY: ${{ secrets.ARCGIS_API_KEY }}
+          ARCGIS_MONTHLY_CAP: ${{ secrets.ARCGIS_MONTHLY_CAP }}
+          MAPTILER_API_KEY: ${{ secrets.MAPTILER_API_KEY }}
+          MAPTILER_MONTHLY_CAP: ${{ secrets.MAPTILER_MONTHLY_CAP }}
+          NOMINATIM_EMAIL: ${{ secrets.NOMINATIM_EMAIL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          REPORT_FROM: ${{ secrets.REPORT_FROM }}
+          REPORT_RECIPIENTS: ${{ secrets.REPORT_RECIPIENTS }}
+        run: |
+          # --schedule starts the run the Admin schedule says is due (day and hour), sends the morning status email and
+          # starts the daily improve; each is done at most once a day, so it is safe to repeat every hour.
+          args=(--schedule)
+          if [ -n "$START" ] && [ "$START" != "none" ]; then
+            args+=("--start=$START")
+            if [ -n "$REGION" ]; then args+=("--region=$REGION"); fi
+          fi
+          npx tsx scripts/worker.ts "${args[@]}"

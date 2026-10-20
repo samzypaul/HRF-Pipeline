@@ -85,7 +85,7 @@ export async function saveSettingsAction(form: FormData) {
   const current = await getSettings();
   const next = normalizeSettings({
     access: current.access, // edited by its own form
-    schedule: { cadence: String(form.get("cadence")), weekday: Number(form.get("weekday")) },
+    schedule: { cadence: String(form.get("cadence")), weekday: Number(form.get("weekday")), hour: Number(form.get("hour")) },
     dailyEmail: { enabled: form.get("dailyEmail") === "on" },
     geoProvider: String(form.get("geoProvider")),
     reports: { recipients: parseEmails(form.get("reportRecipients")) },

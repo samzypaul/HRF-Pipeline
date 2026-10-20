@@ -211,8 +211,19 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 ))}
               </select>
             </label>
+            <label className="flex flex-col gap-1 text-xs text-muted">
+              Start no earlier than (East Africa Time)
+              <select className="input" name="hour" defaultValue={settings.schedule.hour}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <option key={h} value={h}>
+                    {String(h).padStart(2, "0")}:00
+                  </option>
+                ))}
+              </select>
+            </label>
             <p className="text-xs text-muted">
-              Runs start at about 02:00 East Africa Time on the chosen day. Daily runs check the whole registry every day but refresh
+              Runs are started by the hourly GitHub worker (and the daily Vercel cron at 02:00) on the chosen day, from the chosen hour, at most once a day.
+              Daily runs check the whole registry every day but refresh
               facility details more slowly, so the portal sees about the same load.
             </p>
           </div>

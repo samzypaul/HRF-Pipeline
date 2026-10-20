@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, describeSchedule, eatDay, normalizeSettings, runDueToday } from "@/lib/settings";
+import { DEFAULT_SETTINGS, describeSchedule, eatDay, eatHour, normalizeSettings, runDueToday } from "@/lib/settings";
 
 describe("schedule", () => {
   it("uses East Africa Time for the day", () => {
@@ -8,16 +8,24 @@ describe("schedule", () => {
   });
   it("runs weekly only on the chosen weekday", () => {
     const monday = new Date("2026-10-11T23:00:00Z");
-    expect(runDueToday({ cadence: "weekly", weekday: 1 }, monday)).toBe(true);
-    expect(runDueToday({ cadence: "weekly", weekday: 3 }, monday)).toBe(false);
+    expect(runDueToday({ cadence: "weekly", weekday: 1, hour: 2 }, monday)).toBe(true);
+    expect(runDueToday({ cadence: "weekly", weekday: 3, hour: 2 }, monday)).toBe(false);
   });
   it("runs daily every day and never when off", () => {
     const d = new Date("2026-10-14T23:00:00Z");
-    expect(runDueToday({ cadence: "daily", weekday: 1 }, d)).toBe(true);
-    expect(runDueToday({ cadence: "off", weekday: 1 }, d)).toBe(false);
+    expect(runDueToday({ cadence: "daily", weekday: 1, hour: 2 }, d)).toBe(true);
+    expect(runDueToday({ cadence: "off", weekday: 1, hour: 2 }, d)).toBe(false);
+  });
+  it("waits for the chosen hour (East Africa Time)", () => {
+    const midnight = new Date("2026-10-11T21:07:00Z"); // Monday 00:07 EAT
+    const twoAm = new Date("2026-10-11T23:07:00Z"); // Monday 02:07 EAT
+    expect(runDueToday({ cadence: "weekly", weekday: 1, hour: 2 }, midnight)).toBe(false);
+    expect(runDueToday({ cadence: "weekly", weekday: 1, hour: 2 }, twoAm)).toBe(true);
+    expect(runDueToday({ cadence: "weekly", weekday: 1, hour: 0 }, midnight)).toBe(true);
+    expect(eatHour(twoAm)).toBe(2);
   });
   it("describes the schedule", () => {
-    expect(describeSchedule({ cadence: "weekly", weekday: 5 })).toBe("every Friday");
+    expect(describeSchedule({ cadence: "weekly", weekday: 5, hour: 2 })).toBe("every Friday from 02:00");
   });
 });
 
@@ -26,6 +34,8 @@ describe("settings", () => {
     expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
     const s = normalizeSettings({ schedule: { cadence: "hourly", weekday: 9 }, geoLayers: { osm: "yes", google: false } });
     expect(s.schedule).toEqual(DEFAULT_SETTINGS.schedule);
+    expect(normalizeSettings({ schedule: { cadence: "daily", weekday: 1, hour: 30 } }).schedule.hour).toBe(2);
+    expect(normalizeSettings({ schedule: { cadence: "daily", weekday: 1, hour: 6 } }).schedule.hour).toBe(6);
     expect(s.geoLayers.osm).toBe(true);
     expect(s.geoLayers.google).toBe(false);
   });

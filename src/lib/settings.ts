@@ -6,8 +6,8 @@ import type { GeoProvider } from "./geo/provider";
 export type Cadence = "off" | "weekly" | "daily";
 
 export interface Settings {
-  /** Automatic runs: off, once a week on `weekday` (0 = Sunday … 6 = Saturday, East Africa Time), or every day. */
-  schedule: { cadence: Cadence; weekday: number };
+  /** Automatic runs: off, once a week on `weekday` (0 = Sunday … 6 = Saturday), or every day, no earlier than `hour` (0–23). All East Africa Time. */
+  schedule: { cadence: Cadence; weekday: number; hour: number };
   /** Morning status email to REPORT_RECIPIENTS. */
   dailyEmail: { enabled: boolean };
   /** Geocoders behind the "extra geocoder" layer: all with a key at once ("all"), one of them, or the first with a key ("auto"). */
@@ -23,7 +23,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  schedule: { cadence: "weekly", weekday: 1 },
+  schedule: { cadence: "weekly", weekday: 1, hour: 2 },
   dailyEmail: { enabled: false },
   geoProvider: "all",
   approvals: { emailEnabled: true, recipients: [] },
@@ -68,16 +68,23 @@ export function eatDay(now = new Date()): { date: string; weekday: number } {
   return { date: shifted.toISOString().slice(0, 10), weekday: shifted.getUTCDay() };
 }
 
-/** Should the scheduler start a run on this day? */
+/** Hour of the day (0–23) in East Africa Time. */
+export function eatHour(now = new Date()): number {
+  return new Date(now.getTime() + EAT_OFFSET_MS).getUTCHours();
+}
+
+/** Should the scheduler start a run now? It must be a run day and no earlier than the chosen hour (East Africa Time). */
 export function runDueToday(schedule: Settings["schedule"], now = new Date()): boolean {
+  if (eatHour(now) < schedule.hour) return false;
   if (schedule.cadence === "daily") return true;
   if (schedule.cadence === "weekly") return eatDay(now).weekday === schedule.weekday;
   return false;
 }
 
 export function describeSchedule(s: Settings["schedule"]): string {
-  if (s.cadence === "daily") return "every day";
-  if (s.cadence === "weekly") return `every ${WEEKDAYS[s.weekday] ?? "Monday"}`;
+  const at = ` from ${String(s.hour).padStart(2, "0")}:00`;
+  if (s.cadence === "daily") return `every day${at}`;
+  if (s.cadence === "weekly") return `every ${WEEKDAYS[s.weekday] ?? "Monday"}${at}`;
   return "off";
 }
 
@@ -88,6 +95,7 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
   const email = (raw?.dailyEmail ?? {}) as Partial<Settings["dailyEmail"]>;
   const layers = (raw?.geoLayers ?? {}) as Partial<Settings["geoLayers"]>;
   const weekday = Number(sched.weekday);
+  const hour = Number(sched.hour);
   const provider = raw?.geoProvider;
   const approvals = (raw?.approvals ?? {}) as Partial<Settings["approvals"]>;
   const reports = (raw?.reports ?? {}) as Partial<Settings["reports"]>;
@@ -103,6 +111,7 @@ export function normalizeSettings(raw: Partial<Record<keyof Settings, unknown>> 
     schedule: {
       cadence: sched.cadence === "off" || sched.cadence === "daily" || sched.cadence === "weekly" ? sched.cadence : d.schedule.cadence,
       weekday: Number.isInteger(weekday) && weekday >= 0 && weekday <= 6 ? weekday : d.schedule.weekday,
+      hour: sched.hour != null && Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : d.schedule.hour,
     },
     dailyEmail: { enabled: typeof email.enabled === "boolean" ? email.enabled : d.dailyEmail.enabled },
     geoLayers: {

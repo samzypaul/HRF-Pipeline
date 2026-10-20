@@ -7,15 +7,24 @@
  *   npx tsx scripts/worker.ts --start=full
  *   npx tsx scripts/worker.ts --start=weekly
  *   npx tsx scripts/worker.ts --start=validate
+ *   npx tsx scripts/worker.ts --schedule           # first start whatever the Admin schedule says is due (GitHub Actions does this)
+ *
+ * WORKER_MAX_MINUTES (set by the GitHub Actions workflow) makes it stop between ticks after that long, so the job ends cleanly
+ * before GitHub's time limit; the next job resumes from the database.
  */
 import "./_env";
 import { closeDb } from "../src/lib/db/client";
 import { createRun, type RunKind } from "../src/lib/jobs/queue";
 import { runTick } from "../src/lib/jobs/runner";
+import { runScheduledTasks } from "../src/lib/jobs/schedule";
 
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 
 async function main() {
+  // --schedule: do what Vercel Cron does (start the scheduled run if due, status email, idle improve). Safe to repeat every hour.
+  if (process.argv.includes("--schedule")) {
+    console.log("[worker] scheduled tasks:", JSON.stringify(await runScheduledTasks({ kick: false })));
+  }
   const start = arg("start") as RunKind | undefined;
   if (start) {
     const params: Record<string, unknown> = {};
@@ -25,7 +34,13 @@ async function main() {
   }
   let total = 0;
   let crashes = 0;
+  const maxMinutes = Number(process.env.WORKER_MAX_MINUTES) || 0;
+  const stopAt = maxMinutes ? Date.now() + maxMinutes * 60_000 : Infinity;
   for (;;) {
+    if (Date.now() > stopAt) {
+      console.log(`[worker] reached WORKER_MAX_MINUTES (${maxMinutes}); stopping so the next job can resume`);
+      break;
+    }
     let r: Awaited<ReturnType<typeof runTick>>;
     try {
       r = await runTick(10 * 60_000);

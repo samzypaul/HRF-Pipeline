@@ -167,6 +167,27 @@ npm run worker -- --start=pilot --region=TZ.SH.KA   # run a pilot from the termi
 > Vercel Hobby limits functions to 300 s and cron to once a day. The app works within that: long jobs run as a
 > chain of ~180-second ticks. If a chain ever breaks, the daily watchdog (or **Admin → Nudge runner**) restarts it.
 
+### Running the worker on GitHub Actions
+
+`.github/workflows/worker.yml` runs `scripts/worker.ts` on GitHub's servers, so scraping and validation keep going without your
+computer or a Vercel request. The dashboard stays on Vercel; the database is the only shared state.
+
+1. In the repo go to **Settings → Secrets and variables → Actions** and add the same values as your `.env.local` as repository
+   secrets (at least `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `CRON_SECRET`, `AUTH_SECRET`, `HFR_CONTACT_EMAIL`; also the
+   geocoder keys, `RESEND_API_KEY`, `REPORT_FROM` and `REPORT_RECIPIENTS` you use). Empty secrets are fine.
+2. Every hour the workflow first runs the pipeline's scheduled tasks (`--schedule`): it **starts the automatic run** when the
+   Admin schedule says it is due (chosen weekday or every day, from the chosen hour, East Africa Time), sends the morning status
+   email, and starts the daily "improve" when nothing else is running. Each is done at most once a day, and the daily Vercel cron
+   does the same check, so whichever fires first wins and a run is never started twice. It then works through the queue and stops
+   at once when there is none. A busy job works up to about 5.5 hours, stops cleanly, and the next job resumes from the database.
+   Only one worker runs at a time.
+3. **Actions → Pipeline worker → Run workflow** starts a run by hand (full load, weekly, validate, improve, pilot).
+4. GitHub only runs schedules from the repository's **default branch**: merge this into `main` and make `main` the default
+   (Settings → Branches).
+
+If the HFR portal blocks GitHub's IP addresses (it can block datacentre ranges), the job fails with a "blocked" message; then run
+`npx tsx scripts/worker.ts` from your own computer, or use a self-hosted runner.
+
 ## Testing
 
 ```bash
