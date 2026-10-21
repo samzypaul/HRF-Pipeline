@@ -44,6 +44,8 @@ export default async function FacilityPage({ params }: { params: Promise<{ code:
   const changes = await q<{ run_id: number; change_type: string; field_diffs: FieldDiff[] | null; created_at: string }>(sql`
     SELECT run_id, change_type, field_diffs, created_at FROM facility_changes WHERE facility_code = ${code} ORDER BY id DESC LIMIT 50`);
 
+  const [sat] = await q<{ lat: number; lng: number; status: string; note: string | null; source: string | null; checked_at: string }>(sql`
+    SELECT lat, lng, status, note, source, checked_at FROM satellite_checks WHERE facility_code = ${code}`);
   const lat = (g?.final_lat ?? f.hfr_lat) as number | null;
   const lng = (g?.final_lng ?? f.hfr_lng) as number | null;
 
@@ -144,6 +146,40 @@ export default async function FacilityPage({ params }: { params: Promise<{ code:
           )}
         </div>
       </div>
+
+      {lat != null && lng != null && (
+        <div className="card">
+          <h2 className="h2 mb-2">Satellite view</h2>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,420px)_1fr]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/satellite?lat=${lat}&lng=${lng}`}
+              alt={`Satellite view around ${f.name}`}
+              width={420}
+              height={420}
+              loading="lazy"
+              className="aspect-square w-full rounded-lg border border-line bg-canvas object-cover"
+            />
+            <div className="space-y-2 text-sm">
+              <p className="text-muted">The picture is centred on the point above, about 150 m across. Look for a roofed building or compound at the middle.</p>
+              {sat && Math.abs(sat.lat - lat) < 0.0003 && Math.abs(sat.lng - lng) < 0.0003 ? (
+                <>
+                  <p>
+                    <span className="font-medium">
+                      {sat.status === "building" ? "Building seen at the point" : sat.status === "none" ? "No building seen at the point" : "Could not tell from the picture"}
+                    </span>
+                    <span className="text-muted"> · checked {fmtDate(sat.checked_at)}</span>
+                  </p>
+                  {sat.note && <p className="text-muted">{sat.note}</p>}
+                  {sat.status !== "building" && <p className="text-xs text-muted">This does not lower the grade. If the picture shows the facility nearby, use Review to move the point.</p>}
+                </>
+              ) : (
+                <p className="text-muted">Not checked by the satellite step yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="card">

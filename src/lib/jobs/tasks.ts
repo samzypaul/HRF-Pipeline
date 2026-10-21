@@ -7,6 +7,7 @@ import { DETAIL_FIELDS, diffFields, listData, listHash } from "../diff/fields";
 import { errorMessage, hashOf } from "../util";
 import { normalizePhone } from "../phone";
 import { validateFacilities } from "../geo/validate";
+import { SatelliteUnavailable, checkSatellite, satelliteLift } from "../geo/satellite";
 import { generateDailyReport } from "../ai/report";
 import { enqueue, incrementCounts, mergeCounts, type RunRow, type TaskRow } from "./queue";
 
@@ -223,6 +224,65 @@ const validateBatch: Handler = async (task, { run }) => {
   await incrementCounts(run.id, { validated: s.validated, googlePlaces: s.googlePlaces, geocoded: s.geocoded });
 };
 
+/** Set when the satellite check says it cannot run (no credit, cap reached): the rest of the run does not try again for a while. */
+let satelliteDownUntil = 0;
+
+const satelliteBatch: Handler = async (task, { run }) => {
+  const codes = (task.payload.codes as string[]) ?? [];
+  if (codes.length === 0 || Date.now() < satelliteDownUntil) return;
+  const rows = await q<{
+    facility_code: string;
+    lat: number;
+    lng: number;
+    confidence: "high" | "medium" | "low" | null;
+    village_check: string | null;
+    ward_name_check: string | null;
+  }>(sql`
+    SELECT f.facility_code, g.final_lat AS lat, g.final_lng AS lng, g.confidence, g.village_check, g.ward_name_check
+    FROM facilities f JOIN geo_validation g ON g.facility_code = f.facility_code
+    WHERE f.facility_code IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)}) AND g.final_lat IS NOT NULL`);
+  const inc = { satelliteChecked: 0, satelliteBuilding: 0, satelliteNone: 0, satelliteUnclear: 0, satelliteLifted: 0, satelliteErrors: 0 };
+  for (const r of rows) {
+    let verdict;
+    try {
+      verdict = await checkSatellite(r.lat, r.lng);
+    } catch (e) {
+      if (e instanceof SatelliteUnavailable) {
+        satelliteDownUntil = Date.now() + 10 * 60_000;
+        await mergeCounts(run.id, { satelliteStopped: e.message.slice(0, 200) });
+        break;
+      }
+      inc.satelliteErrors++;
+      console.warn(`[satellite] ${r.facility_code}: ${errorMessage(e)}`);
+      continue;
+    }
+    await q(sql`
+      INSERT INTO satellite_checks (facility_code, lat, lng, status, note, source, model, zoom, checked_at)
+      VALUES (${r.facility_code}, ${r.lat}, ${r.lng}, ${verdict.status}, ${verdict.note}, ${verdict.source}, ${verdict.model}, ${env.satelliteZoom}, now())
+      ON CONFLICT (facility_code) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, status = EXCLUDED.status, note = EXCLUDED.note,
+        source = EXCLUDED.source, model = EXCLUDED.model, zoom = EXCLUDED.zoom, checked_at = now()`);
+    inc.satelliteChecked++;
+    if (verdict.status === "building") inc.satelliteBuilding++;
+    else if (verdict.status === "none") inc.satelliteNone++;
+    else inc.satelliteUnclear++;
+    if (verdict.status === "building" && r.confidence) {
+      // Lift the stored grade now; the next validation reaches the same answer from the same evidence.
+      const lifted = satelliteLift(r.confidence, "building", {
+        inVillage: r.village_check === "agrees" ? true : r.village_check === "differs" ? false : null,
+        inWard: r.ward_name_check === "agrees" ? true : r.ward_name_check === "differs" ? false : null,
+      });
+      if (lifted !== r.confidence) {
+        await q(sql`
+          UPDATE geo_validation SET confidence = ${lifted},
+            notes = CASE WHEN coalesce(notes, '') = '' THEN 'satellite imagery shows a building at the point' ELSE notes || '; satellite imagery shows a building at the point' END
+          WHERE facility_code = ${r.facility_code}`);
+        inc.satelliteLifted++;
+      }
+    }
+  }
+  await incrementCounts(run.id, inc);
+};
+
 const dailyReport: Handler = async (task, { run }) => {
   const forRun = Number(task.payload.runId ?? run.id);
   await generateDailyReport(forRun);
@@ -235,5 +295,6 @@ export const HANDLERS: Record<string, Handler> = {
   ward_list: wardList,
   facility_detail: facilityDetail,
   validate_batch: validateBatch,
+  satellite_batch: satelliteBatch,
   weekly_report: dailyReport, // task name kept so queued tasks survive the rename
 };

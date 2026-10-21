@@ -17,10 +17,15 @@ export type GeminiSchema = {
 
 export class GeminiError extends Error {}
 
+/** Gemini cannot be used right now (credits used up, quota or rate limit reached, key rejected, model overloaded): stop calling it for a while. */
+export class GeminiUnavailable extends GeminiError {}
+
 export async function geminiJson<T>(opts: {
   system: string;
   prompt: string;
   schema: GeminiSchema;
+  /** Images sent before the prompt (for example a satellite tile). */
+  images?: { mimeType: string; data: string }[];
   model?: string;
   apiKey?: string;
   fetchImpl?: typeof fetch;
@@ -35,7 +40,7 @@ export async function geminiJson<T>(opts: {
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: opts.system }] },
-      contents: [{ role: "user", parts: [{ text: opts.prompt }] }],
+      contents: [{ role: "user", parts: [...(opts.images ?? []).map((i) => ({ inlineData: { mimeType: i.mimeType, data: i.data } })), { text: opts.prompt }] }],
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: opts.schema,
@@ -46,6 +51,7 @@ export async function geminiJson<T>(opts: {
     signal: AbortSignal.timeout(120_000),
   });
   const body = await res.text();
+  if (res.status === 402 || res.status === 403 || res.status === 429 || res.status === 503) throw new GeminiUnavailable(`Gemini returned ${res.status}: ${body.slice(0, 200)}`);
   if (!res.ok) throw new GeminiError(`Gemini returned ${res.status}: ${body.slice(0, 300)}`);
 
   const json = JSON.parse(body) as {

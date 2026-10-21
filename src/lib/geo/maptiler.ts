@@ -11,6 +11,12 @@ import { ratio } from "./name-match";
 
 export class MaptilerUnavailable extends Error {}
 
+/** MapTiler keys are usually restricted to a website's address, so a server call sends this site's as its origin. */
+export function maptilerHeaders(): Record<string, string> {
+  const origin = env.maptilerOrigin;
+  return { Origin: origin, Referer: `${origin}/` };
+}
+
 interface Feature {
   id?: string;
   text?: string;
@@ -27,7 +33,7 @@ async function geocodingRequest(path: string, params: Record<string, string>, fe
   const u = new URL(`https://api.maptiler.com/geocoding/${path}.json`);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
   u.searchParams.set("key", key);
-  const res = await fetchImpl(u, { signal: AbortSignal.timeout(20_000) });
+  const res = await fetchImpl(u, { headers: maptilerHeaders(), signal: AbortSignal.timeout(20_000) });
   if (res.status === 401 || res.status === 403) throw new MaptilerUnavailable(`MapTiler rejected the key (${res.status})`);
   if (res.status === 429) throw new MaptilerUnavailable("MapTiler rate limit reached");
   if (!res.ok) throw new Error(`MapTiler returned ${res.status}`);
@@ -53,7 +59,8 @@ export async function maptilerSearch(query: string, opts: { bbox?: BBox; fetchIm
 
 /** Names of the places a point falls in (the feature itself and its parents), most specific first. */
 export async function maptilerReverseNames(lat: number, lng: number, fetchImpl: typeof fetch = fetch): Promise<string[]> {
-  const features = await geocodingRequest(`${lng},${lat}`, { limit: "5" }, fetchImpl);
+  // No `limit`: MapTiler rejects it for a reverse lookup unless a single type is given, and the whole place hierarchy is what is wanted.
+  const features = await geocodingRequest(`${lng},${lat}`, {}, fetchImpl);
   return namesFrom(features);
 }
 

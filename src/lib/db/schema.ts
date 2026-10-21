@@ -302,6 +302,25 @@ export const geoValidation = pgTable(
   (t) => [index("geo_validation_conf_idx").on(t.confidence)],
 );
 
+/** The satellite check: was a building seen at the point (lat, lng) that was checked? One row per facility, replaced when the point moves. */
+export const satelliteChecks = pgTable(
+  "satellite_checks",
+  {
+    facilityCode: text("facility_code")
+      .primaryKey()
+      .references(() => facilities.facilityCode, { onDelete: "cascade" }),
+    lat: doublePrecision("lat").notNull(),
+    lng: doublePrecision("lng").notNull(),
+    status: text("status").notNull(), // building | none | unclear
+    note: text("note"), // the model's one-sentence reason
+    source: text("source"), // maptiler | google (where the picture came from)
+    model: text("model"),
+    zoom: smallint("zoom"),
+    checkedAt: ts("checked_at").defaultNow().notNull(),
+  },
+  (t) => [index("satellite_checks_status_idx").on(t.status)],
+);
+
 /** Suggested ward ↔ boundary links (from the extra geocoder) waiting for approval on the Admin page. */
 export const wardSuggestions = pgTable("ward_suggestions", {
   wardCode: text("ward_code").primaryKey(),

@@ -79,6 +79,32 @@ export function pickVillage(
   return tied ? null : best.r;
 }
 
+/**
+ * Pick the village polygon an HFR record names when the ward cannot be used (the portal's ward was renamed or split since the village
+ * file was made): the village name must be identical, the council (district) alike, and exactly one polygon may fit. Pure.
+ */
+export function pickVillageInCouncil(rows: VillageCandidate[], hfrVillage: string | null, hfrCouncil: string | null, hfrRegion: string | null): VillageCandidate | null {
+  const vn = normAdmin(hfrVillage);
+  const cn = normAdmin(hfrCouncil);
+  const rn = normAdmin(hfrRegion);
+  if (!vn || !cn) return null;
+  const fits = rows.filter(
+    (r) => normAdmin(r.name) === vn && (!rn || normAdmin(r.region_name) === rn) && !!normAdmin(r.district_name) && ratio(cn, normAdmin(r.district_name)) >= SAME_NAME,
+  );
+  return fits.length === 1 ? fits[0] : null;
+}
+
+/** Every village polygon of a region (with its centre), for the council-level match. Load once per region and reuse. */
+export async function villagesOfRegion(hfrRegion: string | null): Promise<VillageCandidate[]> {
+  const key = (hfrRegion ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/region$/, "");
+  if (!key) return [];
+  return q<VillageCandidate>(sql`
+    SELECT id, name, ward_name, district_name, region_name,
+           ST_Y(ST_PointOnSurface(geom)) AS lat, ST_X(ST_PointOnSurface(geom)) AS lng,
+           ST_YMin(geom) AS south, ST_XMin(geom) AS west, ST_YMax(geom) AS north, ST_XMax(geom) AS east
+    FROM village_boundaries WHERE regexp_replace(regexp_replace(lower(region_name), '[^a-z0-9]+', '', 'g'), 'region$', '') = ${key}`);
+}
+
 /** Points this close to their village's edge count as inside (village files are simplified and their polygons leave small gaps). */
 export const VILLAGE_EDGE_TOLERANCE_M = 100;
 

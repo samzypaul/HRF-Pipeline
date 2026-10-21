@@ -10,9 +10,20 @@ import { adjustGrade, grade, type CandidatePoint } from "./grade";
 import { combineWardChecks, wardNameCheck, type WardNameCheck } from "./maptiler";
 import { acrossProviders, forwardSearch, resolveProviders, reverseNames, type ActiveProvider } from "./provider";
 import { getSettings } from "../settings";
+import type { SatelliteStatus } from "./satellite";
 import { councilPolygon, pointInCouncilPolygon } from "./council";
 import { pointInTanzania } from "./country";
-import { checkVillage, hasVillageBoundaries, pickVillage, pointInVillage, villagesOfWard, type VillageCandidate, type VillageResult } from "./village";
+import {
+  checkVillage,
+  hasVillageBoundaries,
+  pickVillage,
+  pickVillageInCouncil,
+  pointInVillage,
+  villagesOfRegion,
+  villagesOfWard,
+  type VillageCandidate,
+  type VillageResult,
+} from "./village";
 import { normAdmin } from "./wards";
 
 interface FacilityRow {
@@ -198,6 +209,9 @@ export interface ValidateStats {
   errors: number;
 }
 
+/** A satellite check still counts while the final point is within this distance of the point that was checked. */
+export const SATELLITE_SAME_POINT_M = 30;
+
 /** Validate a batch of facilities (normally all from one ward). */
 export async function validateFacilities(codes: string[]): Promise<ValidateStats> {
   const stats: ValidateStats = { validated: 0, googlePlaces: 0, geocoded: 0, errors: 0 };
@@ -212,6 +226,15 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
     (
       await q<{ facility_code: string; decision: string; lat: number | null; lng: number | null }>(sql`
         SELECT facility_code, decision, lat, lng FROM review_decisions
+        WHERE facility_code IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})`)
+    ).map((r) => [r.facility_code, r]),
+  );
+
+  // What the satellite check saw for each facility's checked point; used only while the final point is still that point.
+  const satellites = new Map(
+    (
+      await q<{ facility_code: string; lat: number; lng: number; status: SatelliteStatus }>(sql`
+        SELECT facility_code, lat, lng, status FROM satellite_checks
         WHERE facility_code IN (${sql.join(codes.map((c) => sql`${c}`), sql`, `)})`)
     ).map((r) => [r.facility_code, r]),
   );
@@ -251,6 +274,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
   const villagesLoaded = await hasVillageBoundaries();
   // Village polygons of a ward, loaded once per batch (a batch is normally one ward).
   const villageRows = new Map<string, Promise<VillageCandidate[]>>();
+  const regionVillages = new Map<string, Promise<VillageCandidate[]>>();
   // Facilities whose exact HFR coordinates are shared with another active facility.
   const sharedCodes = new Set(
     (
@@ -314,6 +338,19 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           pending.catch(() => villageRows.delete(key));
         }
         designated = pickVillage(await pending, f.village_name, f.ward_name, f.council_name, f.region_name);
+      }
+      // The ward may have been renamed or split since the village file was made: then find the village by its name inside the council.
+      let designatedByCouncil = false;
+      if (!designated && villagesLoaded && normAdmin(f.village_name) && normAdmin(f.council_name)) {
+        const key = (f.region_name ?? "").toLowerCase();
+        let pending = regionVillages.get(key);
+        if (!pending) {
+          pending = villagesOfRegion(f.region_name);
+          regionVillages.set(key, pending);
+          pending.catch(() => regionVillages.delete(key));
+        }
+        designated = pickVillageInCouncil(await pending, f.village_name, f.council_name, f.region_name);
+        designatedByCouncil = !!designated;
       }
       /** Inside the designated village; null when the village could not be identified. */
       const inVillageOf = async (lat: number, lng: number): Promise<boolean | null> => (designated ? pointInVillage(designated.id, lat, lng) : null);
@@ -481,7 +518,8 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
       if (!hfrPoint && !relocated && !geocode && designated && layers.wardCentroid) {
         const v = designated;
         if (!(await outsideCouncil(v.lat, v.lng))) villageStandIn = { source: "village_centroid", lat: v.lat, lng: v.lng, inWard: ward ? await inWardOf(v.lat, v.lng) : null, inVillage: true };
-        if (villageStandIn?.inWard === false) villageStandIn = null;
+        // A village found through its council has a ward the boundary file does not know, so the ward cannot veto it.
+        if (villageStandIn?.inWard === false && !designatedByCouncil) villageStandIn = null;
       }
 
       const review = reviews.get(f.facility_code) ?? null;
@@ -555,6 +593,10 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         inVillage: finalInVillage,
         sharedPoint,
         inWard: ward && graded.final ? await inWardOf(graded.final.lat, graded.final.lng) : null,
+        satellite: (() => {
+          const s = satellites.get(f.facility_code);
+          return s && graded.final && haversineM(s.lat, s.lng, graded.final.lat, graded.final.lng) <= SATELLITE_SAME_POINT_M ? s.status : null;
+        })(),
       });
       // Village containment of the chosen point: "outside_village" = still not in the HFR village, "village_fix" = the village rule
       // produced the point (a geocode inside the village, or the village centre) and management is told about it.

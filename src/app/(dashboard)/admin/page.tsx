@@ -129,6 +129,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 <option value="weekly">Weekly check now</option>
                 <option value="improve">Improve data quality (repeats until located)</option>
                 <option value="validate">Re-validate all locations</option>
+                <option value="satellite">Check points on satellite imagery (building at the point?)</option>
                 <option value="climate">Identify climate-sensitive services (no portal calls)</option>
               </select>
               <select className="input" name="region" defaultValue="">

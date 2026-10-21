@@ -78,6 +78,13 @@
       "when": 1792563114804,
       "tag": "0010_climate_portal_services",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792575999998,
+      "tag": "0011_satellite_checks_village_medium",
+      "breakpoints": true
     }
   ]
 }

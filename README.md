@@ -42,7 +42,8 @@ Google (fallback) ──────┘         │
 |---|---|
 | High | HFR point inside its registered ward **and** an OSM/Google place with the same name within 1 km, or confirmed by a reviewer |
 | Medium | Inside its ward with an OSM/Google name match 1–3.5 km away, **or** a replacement point found inside the ward |
-| Low | No name match within 3.5 km, outside its ward or council, a village/ward centre used as a stand-in, or unusable point |
+| Medium (stand-in) | No usable point: the centre of the facility's HFR village is used (it is in the right village, though not on the building) |
+| Low | No name match within 3.5 km, outside its ward or council, a ward or council centre used as a stand-in, or unusable point |
 
 The distances are `MATCH_DISTANCE_M` (1 km), `MEDIUM_DISTANCE_M` (3.5 km) and `SEARCH_RADIUS_M` in `src/lib/geo/name-match.ts`.
 
@@ -57,7 +58,9 @@ During validation, which every run does, the corrected point is chosen like this
 2. A point outside its village is replaced by an OSM, Google or geocoder point that is inside the village, unless a close name
    match confirms the original. If none is found it is kept and flagged **Outside its HFR village** in Data quality.
 3. A facility with no usable point gets a geocoded point inside its village. If geocoding finds nothing inside the village,
-   the centre of the village polygon is used (low confidence).
+   the centre of the village polygon is used (medium confidence). The village is found by its ward, or, when the ward name in the
+   village file is out of date, by its name inside the council (`pickVillageInCouncil`). `npx tsx scripts/backfill-village-centres.ts`
+   moves ward and council stand-ins onto a village centre without calling any geocoder.
 
 Placements made by this rule are flagged **Placed in its village**, and management gets one email per run listing them
 (sent to the approval-email recipients). HFR coordinates are never overwritten.
@@ -172,7 +175,25 @@ npm run derive-wards            # add --replace to rebuild; never touches rows f
 replacement inside the council makes it medium); a village polygon that matches the HFR village and ward raises the grade one step,
 while a village or geocoder placing the point in another ward lowers it one step (both: low); a point shared with another facility
 is lowered one step; a name match needs at least one distinctive word in common, and a match on a very short name (`weak_name_match`)
-cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, low) before the ward centre.
+cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, medium) before the ward centre
+(`ward_centroid`, low) and the council centre (`council_centroid`, low).
+
+### Satellite check
+
+For every medium or low point that is a real point (not a village, ward or council centre) the pipeline looks at a satellite picture
+around it and asks Gemini whether a building or compound stands at the centre (`src/lib/geo/satellite.ts`). The picture is cut from MapTiler's satellite tiles
+when `MAPTILER_API_KEY` is set (its Static Maps API is not on every plan), otherwise it comes from the Google Static Maps API with the
+Google key. MapTiler keys are usually limited to a website address, so server calls send this site's address as their origin
+(`MAPTILER_ORIGIN` overrides it). `SATELLITE_MODEL` picks the Gemini model for the check; Gemini sometimes answers 503 (busy), so the
+check retries a few times and then stops until the next run. The answer is stored in `satellite_checks`.
+
+- **Building seen** lifts the grade one step (low to medium; medium to high only when the village or ward also agrees).
+- **No building** or **unclear** never lowers the grade. The facility shows under Data quality → Issue → "Satellite: no building seen or unclear",
+  and its page shows the same picture with the model's reason, so a person can move the point.
+- **When it runs:** the `satellite` phase after "improve" in full and weekly runs, or on its own from Admin → "Check points on satellite imagery".
+  Each run checks at most `SATELLITE_MAX_PER_RUN` points; a point is re-checked only if it has moved. It stops without error when the
+  imagery cap is reached or Gemini has no credit, and picks up again on the next run.
+- **Pictures on the facility page** come through `/api/satellite` (sign-in required), so the imagery key stays on the server.
 
 ### 4. Environment variables
 

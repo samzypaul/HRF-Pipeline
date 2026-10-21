@@ -6,14 +6,16 @@ import { matchWards } from "../geo/wards";
 import { notifyPendingCorrections } from "../notify/approvals";
 import { notifyVillagePlacements } from "../notify/villages";
 import { refreshClimateServices } from "../climate/refresh";
+import { env } from "../env";
 import { enqueue, failedTaskCount, getRun, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
 
 export const PIPELINES: Record<RunKind, string[]> = {
-  full: ["admin", "list", "wards", "diff", "details", "validate", "improve", "finalize"],
+  full: ["admin", "list", "wards", "diff", "details", "validate", "improve", "satellite", "finalize"],
   pilot: ["admin", "list", "wards", "diff", "details", "validate", "finalize"],
-  weekly: ["admin", "list", "wards", "diff", "details", "validate", "improve", "finalize", "report"],
+  weekly: ["admin", "list", "wards", "diff", "details", "validate", "improve", "satellite", "finalize", "report"],
   validate: ["validate", "finalize"],
-  improve: ["improve", "finalize"],
+  improve: ["improve", "satellite", "finalize"],
+  satellite: ["satellite", "finalize"],
   report: ["report"],
   climate: ["climate"],
 };
@@ -71,6 +73,39 @@ async function seedImprove(run: RunRow): Promise<number> {
     ORDER BY f.ward_code NULLS LAST, f.facility_code`);
   await mergeCounts(run.id, { improveRound: round + 1, improveRemaining: remaining ?? (await countMissingPoints()), improveQueued: rows.length });
   return enqueue(run.id, "validate_batch", batchByWard(rows), 50);
+}
+
+/** Points the satellite check looks at: real points (not a village, ward or council centre) that are only medium or low confidence. */
+const SATELLITE_CANDIDATE = sql`g.final_lat IS NOT NULL AND g.confidence IN ('low', 'medium')
+  AND g.geocode_source NOT IN ('ward_centroid', 'village_centroid', 'council_centroid', 'review')`;
+
+/** A point checked within this distance of where it is now does not need checking again. */
+const SATELLITE_RECHECK_M = 30;
+
+/**
+ * Queue the points that have not been looked at on satellite imagery yet (or whose point has moved since), up to SATELLITE_MAX_PER_RUN.
+ * Facilities with a reviewer's decision are left alone. Does nothing when no imagery key is set.
+ */
+async function seedSatellite(run: RunRow): Promise<number> {
+  if (!env.maptilerKey && !env.googleKey) {
+    await mergeCounts(run.id, { satelliteSkipped: "no imagery key (MAPTILER_API_KEY or GOOGLE_MAPS_API_KEY)" });
+    return 0;
+  }
+  const rows = await q<{ facility_code: string }>(sql`
+    SELECT f.facility_code FROM facilities f
+    JOIN geo_validation g ON g.facility_code = f.facility_code
+    LEFT JOIN satellite_checks sc ON sc.facility_code = f.facility_code
+    LEFT JOIN review_decisions rd ON rd.facility_code = f.facility_code
+    WHERE f.removed_at IS NULL AND rd.facility_code IS NULL AND ${SATELLITE_CANDIDATE}
+      AND (sc.facility_code IS NULL
+        OR 6371000 * 2 * asin(sqrt(power(sin(radians(sc.lat - g.final_lat) / 2), 2)
+             + cos(radians(g.final_lat)) * cos(radians(sc.lat)) * power(sin(radians(sc.lng - g.final_lng) / 2), 2))) > ${SATELLITE_RECHECK_M})
+    ORDER BY (g.confidence = 'low') DESC, f.facility_code
+    LIMIT ${env.satelliteMaxPerRun}`);
+  await mergeCounts(run.id, { satelliteQueued: rows.length });
+  const batches: { codes: string[] }[] = [];
+  for (let i = 0; i < rows.length; i += 10) batches.push({ codes: rows.slice(i, i + 10).map((r) => r.facility_code) });
+  return enqueue(run.id, "satellite_batch", batches, 70);
 }
 
 /** Not yet validated since this run started (needs the geo_validation join aliased as g). */
@@ -182,6 +217,9 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
 
     case "improve":
       return seedImprove(run);
+
+    case "satellite":
+      return seedSatellite(run);
 
     case "finalize": {
       const shared = await flagSharedPoints();

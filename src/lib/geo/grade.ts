@@ -1,5 +1,6 @@
 import type { SanityResult } from "./sanity";
 import { MATCH_DISTANCE_M, MEDIUM_DISTANCE_M } from "./name-match";
+import { satelliteLift, type SatelliteStatus } from "./satellite";
 
 export type Confidence = "high" | "medium" | "low";
 
@@ -50,7 +51,8 @@ export interface GradeResult {
  * Decide the confidence grade and the best location for one facility.
  *  high   – HFR point inside its ward AND a name match within MATCH_DISTANCE_M, 1 km (or a reviewer confirmed it)
  *  medium – inside its ward with a name match 1–3.5 km away (MEDIUM_DISTANCE_M), OR a replacement point found inside the ward
- *  low    – everything else: no name match within 3.5 km, outside its ward or council, a stand-in centre, or unusable point
+ *  low    – everything else: no name match within 3.5 km, outside its ward or council, a ward or council centre, or unusable point
+ * A facility with no usable point gets the centre of its HFR village: medium, because it is in the right village even if not on the building.
  * The HFR coordinates themselves are never modified; `final` is a separate corrected set.
  * `adjustGrade` then applies the village, geocoder and shared-point evidence.
  */
@@ -129,8 +131,8 @@ export function grade(i: GradeInput): GradeResult {
     }
   }
   if (i.villageCentroid) {
-    notes.push("centre of the HFR village used as a stand-in");
-    return { confidence: "low", final: { lat: i.villageCentroid.lat, lng: i.villageCentroid.lng }, geocodeSource: "village_centroid", notes };
+    notes.push("centre of the HFR village used as a stand-in (inside the right village, not on the building)");
+    return { confidence: "medium", final: { lat: i.villageCentroid.lat, lng: i.villageCentroid.lng }, geocodeSource: "village_centroid", notes };
   }
   if (i.centroid) {
     notes.push("ward centre used as a stand-in");
@@ -156,6 +158,8 @@ export interface GradeEvidence {
   sharedPoint: boolean;
   /** the final point is not inside the ward (null when unknown) */
   inWard: boolean | null;
+  /** what the satellite check saw at this exact point (null when it has not been checked) */
+  satellite?: SatelliteStatus | null;
 }
 
 const GEOCODER_SOURCES = ["nominatim", "maptiler_geocode", "arcgis_geocode", "google_geocode"];
@@ -167,6 +171,7 @@ const shift = (c: Confidence, by: number): Confidence => ORDER[Math.max(0, Math.
  *  - village and ward both agree with the HFR record → one grade up (a second, independent source)
  *  - village in another ward, or geocoder in another ward → one grade down; both → low
  *  - another facility has the same HFR coordinates → one grade down, until a reviewer confirms the point
+ *  - satellite imagery shows a building at the point → one grade up (medium to high only with the village or ward agreeing)
  */
 export function adjustGrade(r: GradeResult, e: GradeEvidence): GradeResult {
   if (r.geocodeSource === "review" || !r.final || r.geocodeSource === "ward_centroid" || r.geocodeSource === "village_centroid" || r.geocodeSource === "council_centroid") return r;
@@ -190,6 +195,13 @@ export function adjustGrade(r: GradeResult, e: GradeEvidence): GradeResult {
   if (e.sharedPoint && r.geocodeSource === "hfr") {
     confidence = shift(confidence, -1);
     notes.push("another facility has exactly the same coordinates");
+  }
+  if (e.satellite === "building") {
+    const lifted = satelliteLift(confidence, "building", { inVillage: e.inVillage ?? null, inWard: e.inWard });
+    if (lifted !== confidence) {
+      confidence = lifted;
+      notes.push("satellite imagery shows a building at the point");
+    }
   }
   return confidence === r.confidence && notes.length === r.notes.length ? r : { ...r, confidence, notes };
 }

@@ -90,6 +90,35 @@ export const env = {
   get googleGeocodeMonthlyCap() {
     return num("GOOGLE_GEOCODE_MONTHLY_CAP", 9000);
   },
+  /** The website address sent to MapTiler with every call: its keys are normally restricted to "allowed HTTP origins", and a server call has none of its own. */
+  get maptilerOrigin() {
+    const explicit = read("MAPTILER_ORIGIN");
+    if (explicit) return explicit.replace(/\/$/, "");
+    try {
+      return new URL(this.publicUrl).origin;
+    } catch {
+      return "https://hfr-pipeline.vercel.app";
+    }
+  },
+  /** Gemini model for the satellite check; defaults to GEMINI_MODEL. A lighter model is cheaper and answers when the main one is busy. */
+  get satelliteModel() {
+    return read("SATELLITE_MODEL") ?? this.geminiModel;
+  },
+  /** Monthly cap on MapTiler satellite tiles (each picture needs up to four). */
+  get maptilerTileMonthlyCap() {
+    return num("MAPTILER_TILE_MONTHLY_CAP", 60_000);
+  },
+  get googleStaticMonthlyCap() {
+    return num("GOOGLE_STATIC_MONTHLY_CAP", 8000);
+  },
+  /** Zoom of the satellite image checked around a point (19 = about 150 m across, 0.3 m per pixel). */
+  get satelliteZoom() {
+    return num("SATELLITE_ZOOM", 19);
+  },
+  /** Most points one run sends to the satellite check, so a run always finishes. */
+  get satelliteMaxPerRun() {
+    return num("SATELLITE_MAX_PER_RUN", 2500);
+  },
   get maptilerKey() {
     return read("MAPTILER_API_KEY");
   },

@@ -86,6 +86,7 @@ export function FilterBar({
             <option value="outside_village">Outside its HFR village</option>
             <option value="village_fix">Placed in its village (geocoded or village centre)</option>
             <option value="low">Low confidence</option>
+            <option value="satellite_review">Satellite: no building seen or unclear</option>
           </select>
         </label>
       )}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nameScore, nameIsWeak, normalizeName, tokenSetRatio, MATCH_SCORE } from "@/lib/geo/name-match";
 import { checkPoint } from "@/lib/geo/sanity";
 import { adjustGrade, grade, type GradeInput } from "@/lib/geo/grade";
-import { pickVillage } from "@/lib/geo/village";
+import { pickVillage, pickVillageInCouncil } from "@/lib/geo/village";
 import { normAdmin } from "@/lib/geo/wards";
 
 describe("name matching", () => {
@@ -129,7 +129,7 @@ describe("grade: council, weak names, stand-ins", () => {
     const r = grade({ ...base, hfrOutsideCouncil: true, geocode: { source: "nominatim", lat: -6.5, lng: 35.2, inWard: true } });
     expect(r).toMatchObject({ confidence: "medium", geocodeSource: "nominatim" });
   });
-  it("uses the village centre before the ward centre", () => {
+  it("grades the village centre medium: the right village, even if not the building", () => {
     const r = grade({
       ...base,
       sanity: { flags: ["missing"], usable: false },
@@ -137,7 +137,13 @@ describe("grade: council, weak names, stand-ins", () => {
       inWard: null,
       villageCentroid: { source: "village_centroid", lat: -6.52, lng: 35.13, inWard: true },
     });
-    expect(r).toMatchObject({ confidence: "low", geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
+    expect(r).toMatchObject({ confidence: "medium", geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
+    expect(r.notes.join(" ")).toContain("centre of the HFR village");
+  });
+  it("still grades a ward or council centre low", () => {
+    const none = { ...base, sanity: { flags: ["missing" as const], usable: false }, hfrPoint: null, inWard: null };
+    expect(grade({ ...none, centroid: { source: "ward_centroid", lat: -6.5, lng: 35.1, inWard: true } })).toMatchObject({ confidence: "low", geocodeSource: "ward_centroid" });
+    expect(grade({ ...none, centroid: null, councilCentroid: { source: "council_centroid", lat: -6.5, lng: 35.1, inWard: null } })).toMatchObject({ confidence: "low", geocodeSource: "council_centroid" });
   });
   it("moves a point outside its village to a geocoded point inside the village", () => {
     const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true } });
@@ -259,6 +265,23 @@ describe("pickVillage", () => {
     const rows = [v(1, "Kifuni", "Mwika", "Moshi"), v(2, "Kifuni", "Mwika", "Hai")];
     expect(pickVillage(rows, "Kifuni", "Mwika", "Hai DC", "Kilimanjaro Region")?.id).toBe(2);
     expect(pickVillage([v(1, "Kifuni", "Mwika", "Moshi"), v(2, "Kifuni", "Mwika", "Moshi")], "Kifuni", "Mwika", "Moshi DC", "Kilimanjaro Region")).toBeNull();
+  });
+});
+
+describe("pickVillageInCouncil (ward renamed since the village file)", () => {
+  const v = (id: number, name: string, district: string, ward = "Old Ward", region = "Morogoro") =>
+    ({ id, name, ward_name: ward, district_name: district, region_name: region, lat: -6.8, lng: 37.6 });
+  it("finds the one village with the same name in the council, whatever its ward", () => {
+    const rows = [v(1, "Genda", "Morogoro"), v(2, "Genda", "Kilosa"), v(3, "Mji Mpya", "Morogoro")];
+    expect(pickVillageInCouncil(rows, "Genda", "Morogoro MC", "Morogoro Region")?.id).toBe(1);
+  });
+  it("gives up on two villages of that name in one council, a different name, or a missing council", () => {
+    expect(pickVillageInCouncil([v(1, "Genda", "Morogoro"), v(2, "Genda", "Morogoro")], "Genda", "Morogoro MC", "Morogoro Region")).toBeNull();
+    expect(pickVillageInCouncil([v(1, "Genda", "Morogoro")], "Gendaa", "Morogoro MC", "Morogoro Region")).toBeNull();
+    expect(pickVillageInCouncil([v(1, "Genda", "Morogoro")], "Genda", null, "Morogoro Region")).toBeNull();
+  });
+  it("does not use a village from another region", () => {
+    expect(pickVillageInCouncil([v(1, "Genda", "Morogoro", "W", "Tanga")], "Genda", "Morogoro MC", "Morogoro Region")).toBeNull();
   });
 });
 

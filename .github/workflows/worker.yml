@@ -64,6 +64,12 @@ jobs:
           ARCGIS_MONTHLY_CAP: ${{ secrets.ARCGIS_MONTHLY_CAP }}
           MAPTILER_API_KEY: ${{ secrets.MAPTILER_API_KEY }}
           MAPTILER_MONTHLY_CAP: ${{ secrets.MAPTILER_MONTHLY_CAP }}
+          GOOGLE_STATIC_MONTHLY_CAP: ${{ secrets.GOOGLE_STATIC_MONTHLY_CAP }}
+          SATELLITE_ZOOM: ${{ secrets.SATELLITE_ZOOM }}
+          SATELLITE_MODEL: ${{ secrets.SATELLITE_MODEL }}
+          MAPTILER_TILE_MONTHLY_CAP: ${{ secrets.MAPTILER_TILE_MONTHLY_CAP }}
+          MAPTILER_ORIGIN: ${{ secrets.MAPTILER_ORIGIN }}
+          SATELLITE_MAX_PER_RUN: ${{ secrets.SATELLITE_MAX_PER_RUN }}
           NOMINATIM_EMAIL: ${{ secrets.NOMINATIM_EMAIL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}

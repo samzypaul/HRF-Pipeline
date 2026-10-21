@@ -85,6 +85,11 @@ export function whereFor(f: Filters): SQL {
     case "village_fix":
       parts.push(sql`'village_fix' = ANY(g.sanity_flags)`);
       break;
+    case "satellite_review":
+      // The satellite check could not see a building (or could not tell) at the point as it stands now: a person should look at the picture.
+      parts.push(sql`EXISTS (SELECT 1 FROM satellite_checks sc WHERE sc.facility_code = f.facility_code AND sc.status IN ('none', 'unclear')
+        AND abs(sc.lat - g.final_lat) < 0.0003 AND abs(sc.lng - g.final_lng) < 0.0003)`);
+      break;
     case "shared_point":
       parts.push(sql`'shared_point' = ANY(g.sanity_flags)`);
       break;
