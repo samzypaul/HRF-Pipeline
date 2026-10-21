@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { q } from "../db/client";
-import { CATEGORIES, SERVICES, SERVICE_BY_CODE, TIERS, type Tier } from "./catalogue";
+import { SERVICES, SERVICE_BY_CODE, TIERS, type Tier } from "./catalogue";
 
 export type Lang = "en" | "sw";
 
@@ -115,7 +115,13 @@ const localised = (lang: Lang, en: string, sw: string) => (lang === "sw" ? sw : 
 export function serviceView(code: string, lang: Lang) {
   const s = SERVICE_BY_CODE.get(code);
   if (!s) return null;
-  return { code: s.code, name: localised(lang, s.nameEn, s.nameSw), tier: s.tier, tier_name: localised(lang, TIERS[s.tier].en, TIERS[s.tier].sw) };
+  return {
+    code: s.code,
+    name: localised(lang, s.name, s.nameSw),
+    category: localised(lang, s.category, s.categorySw),
+    tier: s.tier,
+    tier_name: localised(lang, TIERS[s.tier].en, TIERS[s.tier].sw),
+  };
 }
 
 const STAND_INS = new Set(["village_centroid", "ward_centroid", "council_centroid"]);
@@ -212,9 +218,9 @@ export async function listServices(lang: Lang) {
   const n = new Map(counts.map((c) => [c.service_code, c.n]));
   return SERVICES.map((s) => ({
     code: s.code,
-    name: localised(lang, s.nameEn, s.nameSw),
+    name: localised(lang, s.name, s.nameSw),
     description: localised(lang, s.descEn, s.descSw),
-    category: localised(lang, CATEGORIES[s.category].en, CATEGORIES[s.category].sw),
+    category: localised(lang, s.category, s.categorySw),
     tier: s.tier,
     tier_name: localised(lang, TIERS[s.tier].en, TIERS[s.tier].sw),
     facilities: n.get(s.code) ?? 0,

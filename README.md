@@ -65,14 +65,17 @@ Placements made by this rule are flagged **Placed in its village**, and manageme
 ### Climate-sensitive services (El Niño app)
 
 A separate way of reading the same data: which facilities offer services that matter for El Niño rains and flooding. The catalogue
-(`src/lib/climate/catalogue.ts`) holds about 50 services in five priority tiers, each with an English and a Kiswahili name and
-description, taken from the team's brainstorm document and dataset prompt. Services the brainstorm names are marked `draft`; services
-found in the registry that it did not name are marked `added` for the team to review. Entries marked `review` need a native-speaker
-health reviewer for the Kiswahili, or a check of how the registry service was matched.
+(`src/lib/climate/catalogue.ts`) holds 69 real HFR services in five priority tiers. Each is a service exactly as the portal files it
+(its own category and name, unchanged; the portal's misfiled categories and spelling mistakes are kept and noted), with the Kiswahili for
+both, a short English and Kiswahili description and a climate-health rationale. The list comes from the team's brainstorm document and
+dataset prompt: services the brainstorm names are marked `draft`, services found in the registry that it did not name are marked `added`
+for the team to review. `code` (CS001, CS002, ...) is a catalogue id; the portal gives services no codes. All 342 service names and 44
+categories the portal uses are translated in `src/lib/climate/translations.ts` (and stored in `service_translations`); the ones a
+native-speaker health reviewer should check are listed in `NEEDS_REVIEW`.
 
-- **Identification.** Each distinct registry service name is matched by its name, not its category (the portal's categories are
-  sometimes wrong, for example nutrition services filed under "Vaccination"). The result is stored in `facility_climate_services`;
-  the catalogue is stored in `climate_services`. Run it from Admin ("Identify climate-sensitive services", no portal calls), with
+- **Identification.** Each distinct registry row (category plus service name) is matched to the catalogue by its exact portal text.
+  The result is stored in `facility_climate_services`; the catalogue is stored in `climate_services`; every portal service with its
+  Kiswahili name is stored in `service_translations`. Run it from Admin ("Identify climate-sensitive services", no portal calls), with
   `npx tsx scripts/classify-climate.ts`, or automatically at the end of every full or weekly run.
 - **Filters.** The "Climate-sensitive services" filter works on Data quality, Map and Export: any, none, a whole tier, or chosen services.
 - **Export.** Export has a "Climate-sensitive facility dataset" card. It downloads one Excel workbook (a Summary sheet, then
@@ -83,13 +86,13 @@ health reviewer for the Kiswahili, or a check of how the registry service was ma
 ### Public API for the app
 
 An open, read-only JSON API for the El Niño app lives at `/api/v1/climate`. It needs no sign-in and serves only cleaned data: facilities
-that are operating, have a location and offer at least one climate-sensitive service (about 13,000), with their phone numbers and their
-services in English or Kiswahili (`lang=en|sw`). Internal fields (review notes, flags, the portal's raw coordinates) are never returned,
+that are operating, have a location and offer at least one climate-sensitive service (about 12,900), with their phone numbers and their
+services in English or Kiswahili (`lang=en|sw`). Service names and categories are the portal's own. Internal fields (review notes, flags, the portal's raw coordinates) are never returned,
 and a stand-in or unconfirmed point is marked `location.approximate`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/v1/climate/facilities` | A page of facilities. Filters: `service` (codes), `tier` (1 to 5), `region`, `council`, `q` (name), `lat` + `lng` + `radius_km` (nearest first), `min_confidence`, `limit` (up to 200), `offset` |
+| `GET /api/v1/climate/facilities` | A page of facilities. Filters: `service` (codes such as CS020), `tier` (1 to 5), `region`, `council`, `q` (name), `lat` + `lng` + `radius_km` (nearest first), `min_confidence`, `limit` (up to 200), `offset` |
 | `GET /api/v1/climate/facilities/{code}` | One facility |
 | `GET /api/v1/climate/services` | The services with names, descriptions, tiers and facility counts |
 | `GET /api/v1/climate/regions` | Regions with counts; `?region=CODE` gives that region's councils |

@@ -161,11 +161,13 @@ export const facilityServices = pgTable(
   (t) => [uniqueIndex("facility_services_uq").on(t.facilityCode, t.category, t.description)],
 );
 
-/** The climate-sensitive service catalogue (English and Kiswahili), written from src/lib/climate/catalogue.ts. */
+/**
+ * The climate-sensitive services (English and Kiswahili), written from src/lib/climate/catalogue.ts. Each one is a real HFR service:
+ * category_en and name_en are the portal's own text, exactly as in facility_services.
+ */
 export const climateServices = pgTable("climate_services", {
   code: text("code").primaryKey(),
   tier: smallint("tier").notNull(), // 1 (direct) to 5 (secondary)
-  categoryKey: text("category_key").notNull(),
   tierEn: text("tier_en").notNull(),
   tierSw: text("tier_sw").notNull(),
   categoryEn: text("category_en").notNull(),
@@ -176,10 +178,24 @@ export const climateServices = pgTable("climate_services", {
   descSw: text("desc_sw").notNull(),
   rationale: text("rationale").notNull(),
   source: text("source").notNull(), // draft | added
-  confidence: text("confidence").notNull(), // high | review (translation or mapping needs a human check)
+  confidence: text("confidence").notNull(), // high | review (translation needs a human check)
   mappingNote: text("mapping_note"),
   updatedAt: ts("updated_at").defaultNow().notNull(),
 });
+
+/** Kiswahili for every service the portal lists (all categories, not only the climate ones), keyed by the portal's own text. */
+export const serviceTranslations = pgTable(
+  "service_translations",
+  {
+    category: text("category").notNull(),
+    description: text("description").notNull(),
+    categorySw: text("category_sw"),
+    descriptionSw: text("description_sw"),
+    needsReview: boolean("needs_review").default(false).notNull(),
+    updatedAt: ts("updated_at").defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.category, t.description] })],
+);
 
 /** Which facility offers which climate-sensitive service: derived from facility_services by the climate classifier. */
 export const facilityClimateServices = pgTable(

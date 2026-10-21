@@ -64,7 +64,7 @@ export function FilterBar({
               <option value={`tier:${t}`}>All of tier {t}</option>
               {SERVICES.filter((x) => x.tier === t).map((x) => (
                 <option key={x.code} value={`svc:${x.code}`}>
-                  {x.nameEn}
+                  {x.name} ({x.category})
                 </option>
               ))}
             </optgroup>

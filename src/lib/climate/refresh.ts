@@ -1,48 +1,68 @@
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
-import { CATEGORIES, SERVICES, TIERS } from "./catalogue";
+import { SERVICES, TIERS } from "./catalogue";
 import { classifyService } from "./classify";
+import { CATEGORY_SW, NEEDS_REVIEW, SERVICE_SW } from "./translations";
 
 export interface ClimateRefresh {
   services: number;
   facilities: number;
   links: number;
-  /** distinct (category, service name) pairs in the registry that matched at least one climate-sensitive service */
+  /** distinct (category, service name) pairs in the registry that are climate-sensitive services */
   matchedPairs: number;
   totalPairs: number;
+  /** distinct registry (category, service name) pairs with no Kiswahili name yet (new services the portal added) */
+  untranslated: number;
+  /** catalogue services that no facility in the registry offers (a sign the portal renamed or moved one) */
+  missingFromRegistry: string[];
 }
 
 /**
  * Work out which facilities offer climate-sensitive services and store the result.
  *
  * 1. The catalogue is written to `climate_services` (a lookup people can read in the database).
- * 2. Each distinct (category, service name) pair in `facility_services` is classified once (a few hundred pairs, not 300,000 rows).
- * 3. `facility_climate_services` is brought in line with the result: new links added, links that no longer hold removed.
+ * 2. Every distinct (category, service name) pair in `facility_services` gets its Kiswahili name in `service_translations`.
+ * 3. Each pair is matched to the catalogue by its exact portal text (a few hundred pairs, not 300,000 rows).
+ * 4. `facility_climate_services` is brought in line: new links added, links that no longer hold removed.
  * Safe to run at any time and as often as you like.
  */
 export async function refreshClimateServices(): Promise<ClimateRefresh> {
   await q(sql`
-    INSERT INTO climate_services (code, tier, category_key, tier_en, tier_sw, category_en, category_sw, name_en, name_sw, desc_en, desc_sw,
+    INSERT INTO climate_services (code, tier, tier_en, tier_sw, category_en, category_sw, name_en, name_sw, desc_en, desc_sw,
                                   rationale, source, confidence, mapping_note, updated_at)
     VALUES ${sql.join(
-      SERVICES.map((s) => sql`(${s.code}, ${s.tier}, ${s.category}, ${TIERS[s.tier].en}, ${TIERS[s.tier].sw}, ${CATEGORIES[s.category].en}, ${CATEGORIES[s.category].sw},
-        ${s.nameEn}, ${s.nameSw}, ${s.descEn}, ${s.descSw}, ${s.rationale}, ${s.source}, ${s.confidence}, ${s.mappingNote ?? null}, now())`),
+      SERVICES.map((s) => sql`(${s.code}, ${s.tier}, ${TIERS[s.tier].en}, ${TIERS[s.tier].sw}, ${s.category}, ${s.categorySw}, ${s.name}, ${s.nameSw},
+        ${s.descEn}, ${s.descSw}, ${s.rationale}, ${s.source}, ${s.confidence}, ${s.mappingNote ?? null}, now())`),
       sql`, `,
     )}
-    ON CONFLICT (code) DO UPDATE SET tier = EXCLUDED.tier, category_key = EXCLUDED.category_key, tier_en = EXCLUDED.tier_en, tier_sw = EXCLUDED.tier_sw,
+    ON CONFLICT (code) DO UPDATE SET tier = EXCLUDED.tier, tier_en = EXCLUDED.tier_en, tier_sw = EXCLUDED.tier_sw,
       category_en = EXCLUDED.category_en, category_sw = EXCLUDED.category_sw, name_en = EXCLUDED.name_en, name_sw = EXCLUDED.name_sw,
       desc_en = EXCLUDED.desc_en, desc_sw = EXCLUDED.desc_sw, rationale = EXCLUDED.rationale, source = EXCLUDED.source,
       confidence = EXCLUDED.confidence, mapping_note = EXCLUDED.mapping_note, updated_at = now()`);
   await q(sql`DELETE FROM climate_services WHERE code <> ALL(${sql.param(SERVICES.map((s) => s.code))}::text[])`);
 
   const pairs = await q<{ category: string; description: string }>(sql`SELECT DISTINCT category, description FROM facility_services`);
+
+  // Kiswahili for every service the portal lists, climate-sensitive or not.
+  const translated = pairs.map((p) => ({
+    ...p,
+    categorySw: CATEGORY_SW[p.category] ?? null,
+    descriptionSw: SERVICE_SW[p.description] ?? null,
+    review: NEEDS_REVIEW.has(`c:${p.category}`) || NEEDS_REVIEW.has(`s:${p.description}`),
+  }));
+  if (translated.length) {
+    await q(sql`
+      INSERT INTO service_translations (category, description, category_sw, description_sw, needs_review, updated_at)
+      VALUES ${sql.join(translated.map((t) => sql`(${t.category}, ${t.description}, ${t.categorySw}, ${t.descriptionSw}, ${t.review}, now())`), sql`, `)}
+      ON CONFLICT (category, description) DO UPDATE SET category_sw = EXCLUDED.category_sw, description_sw = EXCLUDED.description_sw,
+        needs_review = EXCLUDED.needs_review, updated_at = now()`);
+    await q(sql`DELETE FROM service_translations st WHERE NOT EXISTS (SELECT 1 FROM facility_services fs WHERE fs.category = st.category AND fs.description = st.description)`);
+  }
+
   const map: { category: string; description: string; code: string; tier: number }[] = [];
-  const matched = new Set<string>();
   for (const p of pairs) {
-    for (const s of classifyService(p.category, p.description)) {
-      map.push({ category: p.category, description: p.description, code: s.code, tier: s.tier });
-      matched.add(`${p.category}\u0000${p.description}`);
-    }
+    const s = classifyService(p.category, p.description);
+    if (s) map.push({ category: p.category, description: p.description, code: s.code, tier: s.tier });
   }
 
   if (map.length === 0) {
@@ -65,11 +85,14 @@ export async function refreshClimateServices(): Promise<ClimateRefresh> {
 
   const [totals] = await q<{ facilities: number; links: number }>(sql`
     SELECT count(DISTINCT facility_code)::int facilities, count(*)::int links FROM facility_climate_services`);
+  const found = new Set(map.map((m) => m.code));
   return {
     services: SERVICES.length,
     facilities: Number(totals?.facilities ?? 0),
     links: Number(totals?.links ?? 0),
-    matchedPairs: matched.size,
+    matchedPairs: map.length,
     totalPairs: pairs.length,
+    untranslated: translated.filter((t) => t.categorySw == null || t.descriptionSw == null).length,
+    missingFromRegistry: SERVICES.filter((s) => !found.has(s.code)).map((s) => s.code),
   };
 }

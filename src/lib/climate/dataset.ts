@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 import { readFilters, whereFor, type Filters } from "../data";
-import { CATEGORIES, SERVICES, SERVICE_BY_CODE, TIERS, UNMATCHED } from "./catalogue";
+import { SERVICES, SERVICE_BY_CODE, TIERS, UNMATCHED } from "./catalogue";
 
 /**
  * The climate-sensitive facility dataset for the El Niño app, as sheets (one header row, snake_case columns, UTF-8 when saved as CSV):
@@ -108,10 +108,10 @@ export async function buildSheet(name: SheetName, p: DatasetParams): Promise<{ s
         rows.push({
           facility_code: pair.facility_code,
           service_code: s.code,
-          service_name_en: s.nameEn,
+          service_name_en: s.name,
           service_name_sw: s.nameSw,
-          category_en: CATEGORIES[s.category].en,
-          category_sw: CATEGORIES[s.category].sw,
+          category_en: s.category,
+          category_sw: s.categorySw,
           priority_tier: s.tier,
           tier_name_en: TIERS[s.tier].en,
           tier_name_sw: TIERS[s.tier].sw,
@@ -141,12 +141,12 @@ export async function buildSheet(name: SheetName, p: DatasetParams): Promise<{ s
           ],
           rows: SERVICES.filter((s) => codes.includes(s.code)).map((s) => ({
             service_code: s.code,
-            service_name_en: s.nameEn,
+            service_name_en: s.name,
             service_name_sw: s.nameSw,
             description_en: s.descEn,
             description_sw: s.descSw,
-            category_en: CATEGORIES[s.category].en,
-            category_sw: CATEGORIES[s.category].sw,
+            category_en: s.category,
+            category_sw: s.categorySw,
             priority_tier: s.tier,
             tier_name_en: TIERS[s.tier].en,
             tier_name_sw: TIERS[s.tier].sw,
@@ -244,8 +244,8 @@ export async function buildSummary(p: DatasetParams): Promise<Sheet> {
   for (const r of byTier) add("Facilities per priority tier", `Tier ${r.tier}: ${TIERS[r.tier as 1 | 2 | 3 | 4 | 5].en}`, r.n, "A facility counts in every tier it has a service in.");
   for (const r of byRegion) add("Facilities per region", r.region ?? "Unknown", r.n);
   for (const u of UNMATCHED) add("Not in the registry", u.name, `Tier ${u.tier}`, `${u.origin === "draft" ? "Named in the brainstorm" : "Suggested by the prompt"}. ${u.reason}`);
-  for (const s of SERVICES.filter((x) => x.source === "added")) add("Services added (not in the original draft)", `${s.code}: ${s.nameEn}`, `Tier ${s.tier}`, s.rationale);
-  for (const s of SERVICES.filter((x) => x.confidence === "review")) add("Needs review by the team", `${s.code}: ${s.nameEn}`, s.nameSw, s.mappingNote ?? "Kiswahili needs a native-speaker health professional.");
+  for (const s of SERVICES.filter((x) => x.source === "added")) add("Services added (not in the original draft)", `${s.code}: ${s.name}`, `Tier ${s.tier}`, s.rationale);
+  for (const s of SERVICES.filter((x) => x.confidence === "review")) add("Needs review by the team", `${s.code}: ${s.name}`, s.nameSw, s.mappingNote ?? "Kiswahili needs a native-speaker health professional.");
   const decisions = [
     "Services are matched by their name in the registry, not by the portal category, because categories are sometimes wrong.",
     "Any laboratory test counts as the laboratory service; a test for a specific disease also counts as that disease's service.",

@@ -71,6 +71,13 @@
       "when": 1792509267484,
       "tag": "0009_climate_services",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792563114804,
+      "tag": "0010_climate_portal_services",
+      "breakpoints": true
     }
   ]
 }

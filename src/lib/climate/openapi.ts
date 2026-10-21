@@ -23,7 +23,7 @@ export function openApiSpec(origin: string) {
           description: "Facilities that are operating, have a location and offer at least one climate-sensitive service. Sorted by distance when `lat` and `lng` are given, else by name.",
           parameters: [
             lang,
-            { name: "service", in: "query", schema: { type: "string" }, description: `Comma-separated service codes; a facility must offer at least one. Codes: ${SERVICES.map((s) => s.code).join(", ")}.` },
+            { name: "service", in: "query", schema: { type: "string" }, description: `Comma-separated service codes; a facility must offer at least one. Codes CS001 to CS${String(SERVICES.length).padStart(3, "0")}; see /services for what each one is.` },
             { name: "tier", in: "query", schema: { type: "string" }, description: "Comma-separated priority tiers 1 to 5 (1 = direct climate-sensitive services)." },
             { name: "region", in: "query", schema: { type: "string" }, description: "Region code from /regions, for example TZ.CL.DO." },
             { name: "council", in: "query", schema: { type: "string" }, description: "Council code from /regions?region=…" },
@@ -61,7 +61,7 @@ export function openApiSpec(origin: string) {
         Error: { type: "object", properties: { error: { type: "object", properties: { code: { type: "string" }, message: { type: "string" } } } } },
         Service: {
           type: "object",
-          properties: { code: { type: "string" }, name: { type: "string" }, tier: { type: "integer", minimum: 1, maximum: 5 }, tier_name: { type: "string" } },
+          properties: { code: { type: "string" }, name: { type: "string", description: "The service exactly as the HFR portal names it (or its Kiswahili name)." }, category: { type: "string", description: "The category the HFR portal files it under (or its Kiswahili name)." }, tier: { type: "integer", minimum: 1, maximum: 5 }, tier_name: { type: "string" } },
         },
         Facility: {
           type: "object",
