@@ -42,7 +42,7 @@ export function reverseNames(provider: ActiveProvider, lat: number, lng: number)
 /** Forward search, limited to Tanzania. */
 export function forwardSearch(provider: ActiveProvider, query: string, bbox?: BBox): Promise<Place[]> {
   if (provider === "maptiler") return maptilerSearch(query, { bbox });
-  return provider === "arcgis" ? arcgisSearch(query, { bbox }) : googleGeocode(query);
+  return provider === "arcgis" ? arcgisSearch(query, { bbox }) : googleGeocode(query, bbox);
 }
 
 export interface AcrossResult<T> {

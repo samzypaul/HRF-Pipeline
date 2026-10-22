@@ -91,8 +91,8 @@ export function googleNames(results: GoogleReverseResult[]): string[] {
   return [...out];
 }
 
-/** Geocoding API, limited to Tanzania. */
-export async function googleGeocode(address: string, fetchImpl: typeof fetch = fetch): Promise<Place[]> {
+/** Geocoding API, limited to Tanzania; `bbox` makes Google prefer results inside that rectangle (a bias, not a filter). */
+export async function googleGeocode(address: string, bbox?: BBox, fetchImpl: typeof fetch = fetch): Promise<Place[]> {
   const key = env.googleKey;
   if (!key) throw new GoogleUnavailable("GOOGLE_MAPS_API_KEY not set");
   if (!(await reserveCall("google_geocode", env.googleGeocodeMonthlyCap))) {
@@ -101,6 +101,7 @@ export async function googleGeocode(address: string, fetchImpl: typeof fetch = f
   const u = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   u.searchParams.set("address", address);
   u.searchParams.set("components", "country:TZ");
+  if (bbox) u.searchParams.set("bounds", `${bbox.south},${bbox.west}|${bbox.north},${bbox.east}`);
   u.searchParams.set("key", key);
   const res = await fetchImpl(u, { signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`Google Geocoding returned ${res.status}`);
