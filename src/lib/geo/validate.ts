@@ -496,7 +496,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         }
         if (!geocode && layers.googleGeocode && googleAvailable) {
           try {
-            const res = await apiCall(() => googleGeocode(query));
+            const res = await apiCall(() => googleGeocode(query, villageBox ?? ward?.bbox ?? council?.bbox));
             for (const p of res) {
               if (p.kind === "APPROXIMATE" && !ward) continue;
               const iw = await inWardOf(p.lat, p.lng);
