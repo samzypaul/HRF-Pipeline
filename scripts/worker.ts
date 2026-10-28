@@ -13,7 +13,7 @@
  * before GitHub's time limit; the next job resumes from the database.
  */
 import "./_env";
-import { closeDb } from "../src/lib/db/client";
+import { closeDb, isQuotaError } from "../src/lib/db/client";
 import { createRun, type RunKind } from "../src/lib/jobs/queue";
 import { runTick } from "../src/lib/jobs/runner";
 import { runScheduledTasks } from "../src/lib/jobs/schedule";
@@ -46,6 +46,8 @@ async function main() {
       r = await runTick(10 * 60_000);
       crashes = 0;
     } catch (e) {
+      // Over the Neon quota nothing works until the plan changes, so fail now instead of retrying for a minute and a half.
+      if (isQuotaError(e)) throw new Error("Neon database is over its plan quota (53000); upgrade the plan or wait for the reset, then rerun.", { cause: e });
       // A dropped database connection (Neon closes idle ones) must not end a long run: tasks left running are requeued on the next tick.
       if (++crashes > 5) throw e;
       console.warn(`[worker] tick failed (${e instanceof Error ? e.message : e}); retrying in 15 s (${crashes}/5)`);
