@@ -41,6 +41,12 @@ export function getDb(): NodePgDatabase<typeof schema> {
 const dialect = new PgDialect();
 const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EPIPE|EAI_AGAIN|Connection terminated|timeout exceeded when trying to connect|57P01/i;
 
+/** Neon answers every query with SQLSTATE 53000 once the project is over its plan limits; retrying cannot help until the plan changes. */
+export function isQuotaError(e: unknown): boolean {
+  const cause = (e as { cause?: { code?: string } })?.cause;
+  return cause?.code === "53000" || (e as { code?: string })?.code === "53000" || /exceeded the quota/i.test((e as Error)?.message ?? "");
+}
+
 /** drizzle reports only "Failed query: ..."; put the driver's reason (ECONNRESET, timeout, syntax error...) in the message. */
 function explain(e: unknown): unknown {
   const cause = (e as { cause?: Error })?.cause;

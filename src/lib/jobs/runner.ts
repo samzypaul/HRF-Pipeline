@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isQuotaError } from "../db/client";
 import { env } from "../env";
 import { HfrBlockedError, HfrClient } from "../hfr/client";
 import { errorMessage, sleep } from "../util";
@@ -84,6 +85,8 @@ export async function runTick(budgetMs: number): Promise<TickResult> {
       processed++;
       console.log(`[run ${run.id}] ${task.type} ${JSON.stringify(task.payload).slice(0, 80)} ok (${processed} this tick)`);
     } catch (e) {
+      // Over the database quota every write fails too, so the task cannot be marked; stop the tick and let it be requeued later.
+      if (isQuotaError(e)) throw e;
       failed++;
       console.error(`[run ${run.id}] ${task.type} failed: ${errorMessage(e)}`);
       if (e instanceof HfrBlockedError) {
