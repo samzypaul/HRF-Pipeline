@@ -513,7 +513,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         if (geocode) stats.geocoded++;
       }
 
-      // Last resorts for a facility with no usable point: the centre of its HFR village, then of its ward.
+      // Last resort for a facility with no usable point: the centre of its HFR village (never a ward or council centre).
       let villageStandIn: CandidatePoint | null = null;
       if (!hfrPoint && !relocated && !geocode && designated && layers.wardCentroid) {
         const v = designated;
@@ -534,8 +534,6 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         relocation,
         geocode,
         villageCentroid: villageStandIn,
-        councilCentroid: !hfrPoint && council && layers.wardCentroid ? { source: "council_centroid", lat: council.centre.lat, lng: council.centre.lng, inWard: null } : null,
-        centroid: ward && layers.wardCentroid ? { source: "ward_centroid", lat: ward.centroid.lat, lng: ward.centroid.lng, inWard: true } : null,
         review: review ? { decision: review.decision, lat: review.lat, lng: review.lng } : null,
       });
 

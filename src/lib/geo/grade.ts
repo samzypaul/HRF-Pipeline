@@ -5,7 +5,7 @@ import { satelliteLift, type SatelliteStatus } from "./satellite";
 export type Confidence = "high" | "medium" | "low";
 
 export interface CandidatePoint {
-  source: "osm_match" | "google_match" | "nominatim" | "maptiler_geocode" | "arcgis_geocode" | "google_geocode" | "village_centroid" | "ward_centroid" | "council_centroid";
+  source: "osm_match" | "google_match" | "nominatim" | "maptiler_geocode" | "arcgis_geocode" | "google_geocode" | "village_centroid";
   lat: number;
   lng: number;
   /** inside the registered ward (null when there is no boundary to test) */
@@ -34,9 +34,6 @@ export interface GradeInput {
   geocode: CandidatePoint | null;
   /** the centre of the village polygon named in the HFR record */
   villageCentroid?: CandidatePoint | null;
-  centroid: CandidatePoint | null;
-  /** the centre of the registered council polygon, the coarsest stand-in */
-  councilCentroid?: CandidatePoint | null;
   review: { lat: number | null; lng: number | null; decision: string } | null;
 }
 
@@ -51,8 +48,9 @@ export interface GradeResult {
  * Decide the confidence grade and the best location for one facility.
  *  high   – HFR point inside its ward AND a name match within MATCH_DISTANCE_M, 1 km (or a reviewer confirmed it)
  *  medium – inside its ward with a name match 1–3.5 km away (MEDIUM_DISTANCE_M), OR a replacement point found inside the ward
- *  low    – everything else: no name match within 3.5 km, outside its ward or council, a ward or council centre, or unusable point
+ *  low    – everything else: no name match within 3.5 km, outside its ward or council, or unusable point
  * A facility with no usable point gets the centre of its HFR village: medium, because it is in the right village even if not on the building.
+ * The village centre is the only stand-in: with no village to use, the facility gets no point (never a ward or council centre).
  * The HFR coordinates themselves are never modified; `final` is a separate corrected set.
  * `adjustGrade` then applies the village, geocoder and shared-point evidence.
  */
@@ -133,14 +131,6 @@ export function grade(i: GradeInput): GradeResult {
   if (i.villageCentroid) {
     notes.push("centre of the HFR village used as a stand-in (inside the right village, not on the building)");
     return { confidence: "medium", final: { lat: i.villageCentroid.lat, lng: i.villageCentroid.lng }, geocodeSource: "village_centroid", notes };
-  }
-  if (i.centroid) {
-    notes.push("ward centre used as a stand-in");
-    return { confidence: "low", final: { lat: i.centroid.lat, lng: i.centroid.lng }, geocodeSource: "ward_centroid", notes };
-  }
-  if (i.councilCentroid) {
-    notes.push("council centre used as a stand-in");
-    return { confidence: "low", final: { lat: i.councilCentroid.lat, lng: i.councilCentroid.lng }, geocodeSource: "council_centroid", notes };
   }
   return { confidence: "low", final: null, geocodeSource: null, notes };
 }

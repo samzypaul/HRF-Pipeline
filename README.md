@@ -43,7 +43,7 @@ Google (fallback) ──────┘         │
 | High | HFR point inside its registered ward **and** an OSM/Google place with the same name within 1 km, or confirmed by a reviewer |
 | Medium | Inside its ward with an OSM/Google name match 1–3.5 km away, **or** a replacement point found inside the ward |
 | Medium (stand-in) | No usable point: the centre of the facility's HFR village is used (it is in the right village, though not on the building) |
-| Low | No name match within 3.5 km, outside its ward or council, a ward or council centre used as a stand-in, or unusable point |
+| Low | No name match within 3.5 km, outside its ward or council, or unusable point |
 
 The distances are `MATCH_DISTANCE_M` (1 km), `MEDIUM_DISTANCE_M` (3.5 km) and `SEARCH_RADIUS_M` in `src/lib/geo/name-match.ts`.
 
@@ -175,8 +175,8 @@ npm run derive-wards            # add --replace to rebuild; never touches rows f
 replacement inside the council makes it medium); a village polygon that matches the HFR village and ward raises the grade one step,
 while a village or geocoder placing the point in another ward lowers it one step (both: low); a point shared with another facility
 is lowered one step; a name match needs at least one distinctive word in common, and a match on a very short name (`weak_name_match`)
-cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, medium) before the ward centre
-(`ward_centroid`, low) and the council centre (`council_centroid`, low).
+cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, medium) and nothing else: there is no ward or
+council centre fallback, so a facility with no usable point and no identifiable village gets no point.
 
 ### Satellite check
 

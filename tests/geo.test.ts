@@ -52,7 +52,6 @@ const base: GradeInput = {
   nearMatch: null,
   relocation: null,
   geocode: null,
-  centroid: { source: "ward_centroid", lat: -6.51, lng: 35.11, inWard: true },
   review: null,
 };
 
@@ -79,9 +78,9 @@ describe("grade", () => {
     const r = grade({ ...base, inWard: false, relocation: { source: "osm_match", lat: -6.52, lng: 35.12, inWard: true } });
     expect(r).toMatchObject({ confidence: "medium", geocodeSource: "osm_match", final: { lat: -6.52, lng: 35.12 } });
   });
-  it("low with ward centre when there is no usable point", () => {
+  it("no point (and no ward centre) when there is no usable point and no village", () => {
     const r = grade({ ...base, sanity: { flags: ["missing"], usable: false }, hfrPoint: null, inWard: null });
-    expect(r).toMatchObject({ confidence: "low", geocodeSource: "ward_centroid" });
+    expect(r).toMatchObject({ confidence: "low", final: null, geocodeSource: null });
   });
   it("medium when a missing point is geocoded inside the ward", () => {
     const r = grade({
@@ -139,11 +138,6 @@ describe("grade: council, weak names, stand-ins", () => {
     });
     expect(r).toMatchObject({ confidence: "medium", geocodeSource: "village_centroid", final: { lat: -6.52, lng: 35.13 } });
     expect(r.notes.join(" ")).toContain("centre of the HFR village");
-  });
-  it("still grades a ward or council centre low", () => {
-    const none = { ...base, sanity: { flags: ["missing" as const], usable: false }, hfrPoint: null, inWard: null };
-    expect(grade({ ...none, centroid: { source: "ward_centroid", lat: -6.5, lng: 35.1, inWard: true } })).toMatchObject({ confidence: "low", geocodeSource: "ward_centroid" });
-    expect(grade({ ...none, centroid: null, councilCentroid: { source: "council_centroid", lat: -6.5, lng: 35.1, inWard: null } })).toMatchObject({ confidence: "low", geocodeSource: "council_centroid" });
   });
   it("moves a point outside its village to a geocoded point inside the village", () => {
     const r = grade({ ...base, hfrOutsideVillage: true, geocode: { source: "nominatim", lat: -6.52, lng: 35.12, inWard: true, inVillage: true } });
@@ -205,17 +199,9 @@ describe("grade: council, weak names, stand-ins", () => {
     });
     expect(r.confidence).toBe("medium");
   });
-  it("falls back to the council centre when there is no village or ward centre", () => {
-    const r = grade({
-      ...base,
-      sanity: { flags: ["missing"], usable: false },
-      hfrPoint: null,
-      inWard: null,
-      hasBoundary: false,
-      centroid: null,
-      councilCentroid: { source: "council_centroid", lat: -6.8, lng: 35.4, inWard: null },
-    });
-    expect(r).toMatchObject({ confidence: "low", geocodeSource: "council_centroid", final: { lat: -6.8, lng: 35.4 } });
+  it("gives no point when there is no village centre, even with a ward or council", () => {
+    const r = grade({ ...base, sanity: { flags: ["missing"], usable: false }, hfrPoint: null, inWard: null, hasBoundary: false });
+    expect(r).toMatchObject({ confidence: "low", final: null, geocodeSource: null });
   });
 });
 
