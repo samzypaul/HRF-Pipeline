@@ -4,6 +4,7 @@ import { q } from "./db/client";
 export interface Filters {
   region?: string;
   council?: string;
+  ward?: string;
   confidence?: string;
   type?: string;
   q?: string;
@@ -18,7 +19,7 @@ export function readFilters(sp: Record<string, string | string[] | undefined> | 
     const s = Array.isArray(v) ? v[0] : v;
     return s && s.trim() ? s.trim() : undefined;
   };
-  return { region: get("region"), council: get("council"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue"), climate: get("climate") };
+  return { region: get("region"), council: get("council"), ward: get("ward"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue"), climate: get("climate") };
 }
 
 /**
@@ -53,6 +54,7 @@ export function whereFor(f: Filters): SQL {
   const parts: SQL[] = [sql`f.removed_at IS NULL`];
   if (f.region) parts.push(sql`f.region_code = ${f.region}`);
   if (f.council) parts.push(sql`f.council_code = ${f.council}`);
+  if (f.ward) parts.push(sql`f.ward_code = ${f.ward}`);
   if (f.type) parts.push(sql`f.facility_type = ${f.type}`);
   if (f.confidence) parts.push(f.confidence === "unchecked" ? sql`g.confidence IS NULL` : sql`g.confidence = ${f.confidence}`);
   if (f.q) parts.push(sql`(f.name ILIKE ${"%" + f.q + "%"} OR f.facility_code ILIKE ${f.q + "%"} OR f.common_name ILIKE ${"%" + f.q + "%"})`);

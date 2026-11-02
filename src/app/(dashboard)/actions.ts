@@ -176,7 +176,7 @@ export async function bulkReviewAction(form: FormData) {
   if (decision !== "accept_corrected" && decision !== "accept_hfr") throw new Error("Choose what to apply");
   const reviewer = (await headers()).get("x-user-email") ?? "unknown";
   const filterParams = new URLSearchParams();
-  for (const k of ["region", "council", "confidence", "type", "q", "issue"]) {
+  for (const k of ["region", "council", "ward", "confidence", "type", "q", "issue"]) {
     const v = String(form.get(k) ?? "");
     if (v) filterParams.set(k, v);
   }

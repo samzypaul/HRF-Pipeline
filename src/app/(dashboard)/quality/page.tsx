@@ -42,7 +42,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
       )}
 
       <form id="bulk" action={bulkReviewAction} className="card mb-5 flex flex-wrap items-end gap-3 p-4 text-sm">
-        {(["region", "council", "confidence", "type", "q", "issue"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
+        {(["region", "council", "ward", "confidence", "type", "q", "issue"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
         <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Apply to several facilities at once
           <select className="input" name="decision" defaultValue="accept_corrected">
