@@ -4,15 +4,16 @@ import { whereFor, type Filters } from "./data";
 
 /**
  * What the distribution can be split by. Every expression is fixed here, never taken from the request.
- * Rows are grouped by name (some facilities carry a region code but no name, or the reverse); `ru` is the region the code names,
- * used to fill a missing region name. `key` is the code the Review tab filters on.
+ * Rows are grouped by name (some facilities carry a region code but no name, or the reverse); `ru` and `cu` are the region and council the codes name,
+ * used to fill a missing name. `key` is the code the Review tab filters on.
  */
 const REGION = "coalesce(f.region_name, ru.name)";
+const COUNCIL = "coalesce(f.council_name, cu.name)";
 export const DIMENSIONS = {
   type: { label: "Facility type", key: "f.facility_type", name: "f.facility_type", sub: "NULL", from: "" },
   region: { label: "Region", key: "f.region_code", name: REGION, sub: "NULL", from: "" },
-  council: { label: "Council", key: "f.council_code", name: "f.council_name", sub: REGION, from: "" },
-  ward: { label: "Ward", key: "f.ward_code", name: "f.ward_name", sub: `concat_ws(', ', f.council_name, ${REGION})`, from: "" },
+  council: { label: "Council", key: "f.council_code", name: COUNCIL, sub: REGION, from: "" },
+  ward: { label: "Ward", key: "f.ward_code", name: "f.ward_name", sub: `concat_ws(', ', ${COUNCIL}, ${REGION})`, from: "" },
   ownership: { label: "Ownership", key: "f.ownership_category", name: "f.ownership_category", sub: "NULL", from: "" },
   status: { label: "Operating status", key: "f.operating_status", name: "f.operating_status", sub: "NULL", from: "" },
   service: {
@@ -61,6 +62,7 @@ export async function gradeDistribution(by: DimensionKey, filters: Filters): Pro
            count(*) OVER ()::int AS groups
     FROM facilities f ${sql.raw(d.from)}
     LEFT JOIN admin_units ru ON ru.code = f.region_code AND ru.level = 1
+    LEFT JOIN admin_units cu ON cu.code = f.council_code AND cu.level = 3
     LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
     WHERE ${where}
     GROUP BY 2, 3
