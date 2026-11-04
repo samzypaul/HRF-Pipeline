@@ -85,6 +85,13 @@
       "when": 1792575999998,
       "tag": "0011_satellite_checks_village_medium",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793821166873,
+      "tag": "0012_climate_tiers_1_2_narrowed",
+      "breakpoints": true
     }
   ]
 }

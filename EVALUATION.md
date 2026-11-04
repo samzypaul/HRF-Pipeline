@@ -33,7 +33,7 @@ Test each piece in the order data flows through it. Record the date, the result 
 
 ## Notes: climate-sensitive services (2026-10-21)
 
-- **Decision.** The climate data is the normal registry data filtered, not a renamed copy. Each climate service is a portal service exactly as filed (category and name unchanged, wrong categories and spelling kept and noted); only Kiswahili, the five tiers and a short description are added. Codes `CS001` to `CS069` are catalogue ids because the portal gives services none.
+- **Decision.** The climate data is the normal registry data filtered, not a renamed copy. Each climate service is a portal service exactly as filed (category and name unchanged, wrong categories and spelling kept and noted); only Kiswahili, the five tiers and a short description are added. Codes (`CS001` to `CS069`, with gaps after tiers 1 and 2 were narrowed to the team's 13 named services) are catalogue ids because the portal gives services none.
 - **Matching** is by the portal's exact (category, service name) pair, so every climate row traces to a `facility_services` row. The same service filed under several categories has one code per category.
 - **Breaking change.** The public API now returns `CS` codes and portal names. Anything built on the old codes (for example `MAL-MRDT`) must be updated.
 - **Correction.** Growth monitoring does exist in the portal (maternity and nursing homes, under 40 facilities) and is included in tier 4.
