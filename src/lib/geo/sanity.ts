@@ -14,6 +14,7 @@ export type SanityFlag =
   | "outside_tanzania"
   | "low_precision"
   | "shared_point"
+  | "shared_after_geocoding"
   | "geocoder_ward_differs"
   | "village_ward_differs"
   | "outside_council"

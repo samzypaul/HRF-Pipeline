@@ -85,9 +85,14 @@ export function parseFacilityQuery(sp: URLSearchParams): Parsed<FacilityQuery> {
   return { ok: true, value: { lang: lang.value, services, tiers, region, council, q: text, near, minConfidence: conf ?? undefined, limit, offset } as FacilityQuery };
 }
 
-/** Only facilities worth showing to the public: operating, located, and offering at least one climate-sensitive service. */
+/**
+ * Only facilities worth showing to the public: operating, located, offering at least one climate-sensitive service, and not still on the
+ * same point as another facility after geocoding (the pipeline's `shared_after_geocoding` tag; at least one of them is on the wrong spot).
+ * Applies to every endpoint, so lists, single facilities and the counts agree.
+ */
 const ELIGIBLE = sql`f.removed_at IS NULL AND f.operating_status ILIKE 'operating' AND coalesce(g.final_lat, f.hfr_lat) IS NOT NULL
-  AND EXISTS (SELECT 1 FROM facility_climate_services cs0 WHERE cs0.facility_code = f.facility_code)`;
+  AND EXISTS (SELECT 1 FROM facility_climate_services cs0 WHERE cs0.facility_code = f.facility_code)
+  AND NOT ('shared_after_geocoding' = ANY(coalesce(g.sanity_flags, ARRAY[]::text[])))`;
 
 interface FacilityRow {
   facility_code: string;
