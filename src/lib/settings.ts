@@ -51,7 +51,7 @@ export const GEO_LAYER_INFO: { key: keyof Settings["geoLayers"]; label: string; 
     hint: "Reverse-geocodes each point to check its ward name, suggests ward links, and (MapTiler only) finds points for facilities with no coordinates. Provider chosen below.",
   },
   { key: "googleGeocode", label: "Google geocoding", hint: "Second geocoder, used after Nominatim. Counts against the monthly cap." },
-  { key: "wardCentroid", label: "Ward centre stand-in", hint: "Last resort: low-confidence point at the middle of the ward (or of the council when there is no ward)." },
+  { key: "wardCentroid", label: "Village centre stand-in", hint: "Last resort for a facility with no usable point: the middle of its HFR village (medium confidence). Ward and council centres are no longer used." },
 ];
 
 /** Scheduler bookkeeping, kept apart from user settings so saving the form never resets it. */

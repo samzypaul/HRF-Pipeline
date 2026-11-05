@@ -68,6 +68,7 @@ export async function arcgisSearch(query: string, opts: { bbox?: BBox; fetchImpl
       lat: c.location!.y,
       lng: c.location!.x,
       kind: c.attributes?.Addr_type,
+      score: Math.round(c.score ?? 0),
     }));
 }
 

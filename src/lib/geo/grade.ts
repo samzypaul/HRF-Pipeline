@@ -11,6 +11,8 @@ export interface CandidatePoint {
   /** inside the registered ward (null when there is no boundary to test) */
   inWard: boolean | null;
   score?: number;
+  /** the geocoder's own confidence in this result, 0 to 100 (geocoded points only) */
+  geoScore?: number;
   distanceM?: number;
   /** inside the HFR village polygon (null when the village could not be identified) */
   inVillage?: boolean | null;

@@ -69,6 +69,34 @@ describe("all providers at once", () => {
   });
 });
 
+describe("ranking geocoder candidates by their own score", () => {
+  it("puts the highest score first and keeps the answering order for ties", async () => {
+    const { byScoreDesc } = await import("@/lib/geo/provider");
+    const out = byScoreDesc([{ id: "a", score: 72 }, { id: "b", score: 95 }, { id: "c", score: 72 }, { id: "d", score: 88 }]);
+    expect(out.map((p) => p.id)).toEqual(["b", "d", "a", "c"]);
+  });
+  it("leaves a provider without scores in the order it answered, and ranks unscored results last", async () => {
+    const { byScoreDesc } = await import("@/lib/geo/provider");
+    type P = { id: string; score?: number };
+    const plain: P[] = [{ id: "x" }, { id: "y" }, { id: "z" }];
+    expect(byScoreDesc(plain).map((p) => p.id)).toEqual(["x", "y", "z"]);
+    const mixed: P[] = [{ id: "x" }, { id: "y", score: 0 }];
+    expect(byScoreDesc(mixed).map((p) => p.id)).toEqual(["y", "x"]);
+  });
+  it("does not change its input", async () => {
+    const { byScoreDesc } = await import("@/lib/geo/provider");
+    const input = [{ score: 1 }, { score: 2 }];
+    byScoreDesc(input);
+    expect(input).toEqual([{ score: 1 }, { score: 2 }]);
+  });
+  it("ranks Google's location types from exact to approximate", async () => {
+    const { LOCATION_TYPE_SCORE } = await import("@/lib/geo/google");
+    expect(LOCATION_TYPE_SCORE.ROOFTOP).toBeGreaterThan(LOCATION_TYPE_SCORE.RANGE_INTERPOLATED);
+    expect(LOCATION_TYPE_SCORE.RANGE_INTERPOLATED).toBeGreaterThan(LOCATION_TYPE_SCORE.GEOMETRIC_CENTER);
+    expect(LOCATION_TYPE_SCORE.GEOMETRIC_CENTER).toBeGreaterThan(LOCATION_TYPE_SCORE.APPROXIMATE);
+  });
+});
+
 describe("provider choice", () => {
   it("auto prefers MapTiler, then Google, else none", async () => {
     const { resolveProvider } = await import("@/lib/geo/provider");

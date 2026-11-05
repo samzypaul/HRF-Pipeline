@@ -33,6 +33,17 @@ export function isUnavailable(e: unknown): boolean {
   return e instanceof MaptilerUnavailable || e instanceof GoogleUnavailable || e instanceof ArcgisUnavailable;
 }
 
+/**
+ * Candidates best first by the geocoder's own score. The sort is stable, and a result with no score (Nominatim gives none)
+ * ranks last, so a provider without scores keeps the order it answered in. Scores are only comparable within one provider.
+ */
+export function byScoreDesc<T extends { score?: number }>(places: T[]): T[] {
+  return places
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => (b.p.score ?? -1) - (a.p.score ?? -1) || a.i - b.i)
+    .map((x) => x.p);
+}
+
 /** Place names (the point's own and its parents) used to check the ward. */
 export function reverseNames(provider: ActiveProvider, lat: number, lng: number): Promise<string[]> {
   if (provider === "maptiler") return maptilerReverseNames(lat, lng);

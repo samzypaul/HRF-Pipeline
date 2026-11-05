@@ -1,5 +1,4 @@
 import { DEFAULT_LIMIT, DEFAULT_RADIUS_KM, MAX_LIMIT, MAX_RADIUS_KM } from "./api";
-import { SERVICES } from "./catalogue";
 
 /** OpenAPI 3.0 description of the public climate API, served at /api/v1/climate/openapi.json for app developers and API tools. */
 export function openApiSpec(origin: string) {
@@ -23,7 +22,7 @@ export function openApiSpec(origin: string) {
           description: "Facilities that are operating, have a location and offer at least one climate-sensitive service. Sorted by distance when `lat` and `lng` are given, else by name.",
           parameters: [
             lang,
-            { name: "service", in: "query", schema: { type: "string" }, description: `Comma-separated service codes; a facility must offer at least one. Codes CS001 to CS${String(SERVICES.length).padStart(3, "0")}; see /services for what each one is.` },
+            { name: "service", in: "query", schema: { type: "string" }, description: `Comma-separated service codes; a facility must offer at least one. Codes look like CS006 and are not consecutive; see /services for the full list and what each one is.` },
             { name: "tier", in: "query", schema: { type: "string" }, description: "Comma-separated priority tiers 1 to 5 (1 = direct climate-sensitive services)." },
             { name: "region", in: "query", schema: { type: "string" }, description: "Region code from /regions, for example TZ.CL.DO." },
             { name: "council", in: "query", schema: { type: "string" }, description: "Council code from /regions?region=…" },

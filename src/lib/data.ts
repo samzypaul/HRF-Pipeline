@@ -4,12 +4,13 @@ import { q } from "./db/client";
 export interface Filters {
   region?: string;
   council?: string;
+  ward?: string;
   confidence?: string;
   type?: string;
   q?: string;
   /** climate-sensitive services: any | none | tier:1,2 | svc:CODE,CODE */
   climate?: string;
-  issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward | outside_village | village_fix
+  issue?: string; // needs_review | pending_approval | outside_ward | missing_coords | no_match | low | no_ward | outside_village | village_fix | shared_location
 }
 
 export function readFilters(sp: Record<string, string | string[] | undefined> | URLSearchParams): Filters {
@@ -18,7 +19,7 @@ export function readFilters(sp: Record<string, string | string[] | undefined> | 
     const s = Array.isArray(v) ? v[0] : v;
     return s && s.trim() ? s.trim() : undefined;
   };
-  return { region: get("region"), council: get("council"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue"), climate: get("climate") };
+  return { region: get("region"), council: get("council"), ward: get("ward"), confidence: get("confidence"), type: get("type"), q: get("q"), issue: get("issue"), climate: get("climate") };
 }
 
 /**
@@ -53,6 +54,7 @@ export function whereFor(f: Filters): SQL {
   const parts: SQL[] = [sql`f.removed_at IS NULL`];
   if (f.region) parts.push(sql`f.region_code = ${f.region}`);
   if (f.council) parts.push(sql`f.council_code = ${f.council}`);
+  if (f.ward) parts.push(sql`f.ward_code = ${f.ward}`);
   if (f.type) parts.push(sql`f.facility_type = ${f.type}`);
   if (f.confidence) parts.push(f.confidence === "unchecked" ? sql`g.confidence IS NULL` : sql`g.confidence = ${f.confidence}`);
   if (f.q) parts.push(sql`(f.name ILIKE ${"%" + f.q + "%"} OR f.facility_code ILIKE ${f.q + "%"} OR f.common_name ILIKE ${"%" + f.q + "%"})`);
@@ -90,6 +92,10 @@ export function whereFor(f: Filters): SQL {
       parts.push(sql`EXISTS (SELECT 1 FROM satellite_checks sc WHERE sc.facility_code = f.facility_code AND sc.status IN ('none', 'unclear')
         AND abs(sc.lat - g.final_lat) < 0.0003 AND abs(sc.lng - g.final_lng) < 0.0003)`);
       break;
+    case "shared_location":
+      // On exactly the same final point as another facility (stand-in centres included: the status column says which kind).
+      parts.push(sql`g.shared_count > 0`);
+      break;
     case "shared_point":
       parts.push(sql`'shared_point' = ANY(g.sanity_flags)`);
       break;
@@ -117,6 +123,8 @@ export interface FacilityListItem {
   geocode_source: string | null;
   notes: string | null;
   decision: string | null;
+  shared_count: number | null;
+  shared_with: string | null;
 }
 
 export async function listFacilities(f: Filters, page = 1, pageSize = 50) {
@@ -124,7 +132,7 @@ export async function listFacilities(f: Filters, page = 1, pageSize = 50) {
   const rows = await q<FacilityListItem>(sql`
     SELECT f.facility_code, f.name, f.facility_type, f.region_name, f.council_name, f.ward_name, f.operating_status,
            f.hfr_lat, f.hfr_lng, g.confidence, g.in_ward, g.match_source, g.name_score, g.distance_to_ward_m,
-           g.final_lat, g.final_lng, g.geocode_source, g.notes, r.decision
+           g.final_lat, g.final_lng, g.geocode_source, g.notes, r.decision, g.shared_count, g.shared_with
     FROM facilities f
     LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
     LEFT JOIN review_decisions r ON r.facility_code = f.facility_code

@@ -282,6 +282,7 @@ export const geoValidation = pgTable(
     geocodeSource: text("geocode_source"), // hfr | osm_match | google_match | nominatim | maptiler_geocode | google_geocode | village_centroid | ward_centroid | council_centroid | review
     finalLat: doublePrecision("final_lat"),
     finalLng: doublePrecision("final_lng"),
+    geocodeScore: smallint("geocode_score"), // the geocoder's own confidence (0 to 100) when the final point was geocoded; null otherwise
     confidence: text("confidence"), // high | medium | low
     notes: text("notes"),
     approvalEmailedAt: ts("approval_emailed_at"), // the corrected point below was last emailed for approval
@@ -290,6 +291,9 @@ export const geoValidation = pgTable(
     villageEmailedAt: ts("village_emailed_at"), // the village-rule point below was last emailed to management
     villageEmailedLat: doublePrecision("village_emailed_lat"),
     villageEmailedLng: doublePrecision("village_emailed_lng"),
+    sharedCount: integer("shared_count").notNull().default(0), // how many OTHER facilities are on exactly this final point (0 = not shared)
+    sharedWith: text("shared_with"), // their names and codes, "NAME (CODE); NAME (CODE)"; null when not shared
+    sharedEmailedWith: text("shared_emailed_with"), // what the team was last emailed about this facility's shared point
     wardNameCheck: text("ward_name_check"), // agrees | differs | unknown (reverse-geocoded ward vs HFR ward)
     wardCheckedAt: ts("ward_checked_at"),
     wardCheckLat: doublePrecision("ward_check_lat"),
