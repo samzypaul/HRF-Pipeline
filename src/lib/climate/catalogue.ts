@@ -98,7 +98,7 @@ export const SERVICES: ClimateService[] = [
     category: "Health Promotion and Disease Prevention",
     name: "Epidemiological Surveillance and Response",
     categorySw: "Kukuza Afya na Kinga ya Magonjwa",
-    nameSw: "Ufuatiliaji na Udhibiti wa Magonjwa ya Milipuko",
+    nameSw: "Ufuatiliaji na mwitikio wa Magonjwa ya Milipuko",
     descEn: "The facility watches for outbreaks such as malaria, dengue and cholera and reports and responds to them.",
     descSw: "Kituo kinafuatilia milipuko ya magonjwa kama malaria, homa ya dengue na kipindupindu, kinatoa taarifa na kuchukua hatua.",
     rationale: "Floods raise the risk of vector-borne and water-borne outbreaks that surveillance must catch early.",

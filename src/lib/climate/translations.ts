@@ -145,7 +145,7 @@ export const SERVICE_SW: Record<string, string> = {
   "Enzyme commercial kits": "Vifaa vya Vipimo vya Vimeng'enya vya Kibiashara",
   "Enzyme histochemistry": "Kipimo cha Kemikali ya Vimeng'enya kwenye Tishu",
   "Eosinophils Count": "Hesabu ya Seli za Eosinophil",
-  "Epidemiological Surveillance and Response": "Ufuatiliaji na Udhibiti wa Magonjwa ya Milipuko",
+  "Epidemiological Surveillance and Response": "Ufuatiliaji na mwitikio wa Magonjwa ya Milipuko",
   "Exfoliative cytochemistry": "Kipimo cha Kemikali ya Seli za Ute",
   "Eye Examination": "Uchunguzi wa Macho",
   "Eye health promotion and education": "Elimu na Uhamasishaji wa Afya ya Macho",
