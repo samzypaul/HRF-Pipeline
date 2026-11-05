@@ -97,7 +97,7 @@ native-speaker health reviewer should check are listed in `NEEDS_REVIEW`.
 An open, read-only JSON API for the El Niño app lives at `/api/v1/climate`. It needs no sign-in and serves only cleaned data: facilities
 that are operating, have a location and offer at least one climate-sensitive service (about 11,000), with their phone numbers and their
 services in English or Kiswahili (`lang=en|sw`). Service names and categories are the portal's own. Internal fields (review notes, flags, the portal's raw coordinates) are never returned,
-and a stand-in or unconfirmed point is marked `location.approximate`.
+a stand-in or unconfirmed point is marked `location.approximate`. Facilities that still share exactly the same point as another facility after geocoding (flag `shared_after_geocoding`) are left out of every endpoint, lists, single facilities and counts, because at least one of them is on the wrong spot. Stand-in centres are not affected.
 
 | Endpoint | What it returns |
 |---|---|

@@ -108,5 +108,24 @@ export async function refreshSharedLocations(): Promise<SharedRefresh> {
       FROM unnest(${sql.param(chunk.map((c) => c.code))}::text[], ${sql.param(chunk.map((c) => c.count))}::int[], ${sql.param(chunk.map((c) => c.with))}::text[]) AS v(code, cnt, txt)
       WHERE g.facility_code = v.code`);
   }
+  await syncSharedFinalFlag();
   return { facilities: sharedFacilities, groups, largest, changed: changed.length };
+}
+
+/** Tag in `sanity_flags` for facilities still on a shared point after geocoding. The HFR-coordinate flag is `shared_point`. */
+export const SHARED_FINAL_FLAG = "shared_after_geocoding";
+
+/**
+ * Keep the SHARED_FINAL_FLAG tag in line with shared_count: added to facilities whose final point is shared with another facility,
+ * removed from the rest. Stand-in centres are shared by design and are not tagged. Distinct from `shared_point`, which only looks at
+ * the portal's own coordinates.
+ */
+export async function syncSharedFinalFlag(): Promise<void> {
+  const eligible = sql`(f.removed_at IS NULL AND g.final_lat IS NOT NULL AND coalesce(g.shared_count, 0) > 0
+    AND coalesce(g.geocode_source, '') NOT IN ('village_centroid', 'ward_centroid', 'council_centroid'))`;
+  await q(sql`UPDATE geo_validation g SET sanity_flags = array_remove(g.sanity_flags, ${SHARED_FINAL_FLAG})
+    FROM facilities f WHERE f.facility_code = g.facility_code AND ${SHARED_FINAL_FLAG} = ANY(coalesce(g.sanity_flags, ARRAY[]::text[])) AND NOT ${eligible}`);
+  await q(sql`UPDATE geo_validation g SET sanity_flags = array_append(coalesce(g.sanity_flags, ARRAY[]::text[]), ${SHARED_FINAL_FLAG})
+    FROM facilities f WHERE f.facility_code = g.facility_code AND ${eligible}
+      AND NOT (${SHARED_FINAL_FLAG} = ANY(coalesce(g.sanity_flags, ARRAY[]::text[])))`);
 }
