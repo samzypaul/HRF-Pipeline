@@ -81,7 +81,8 @@ export function FilterBar({
             <option value="outside_ward">Outside its ward</option>
             <option value="missing_coords">Missing or unusable coordinates</option>
             <option value="no_match">No name match (OSM / Google)</option>
-            <option value="shared_point">Shares coordinates with another facility</option>
+            <option value="shared_location">Shares its point with another facility</option>
+            <option value="shared_point">Shares HFR coordinates with another facility</option>
             <option value="no_ward">No ward assigned</option>
             <option value="outside_village">Outside its HFR village</option>
             <option value="village_fix">Placed in its village (geocoded or village centre)</option>

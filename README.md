@@ -43,7 +43,7 @@ Google (fallback) ──────┘         │
 | High | HFR point inside its registered ward **and** an OSM/Google place with the same name within 1 km, or confirmed by a reviewer |
 | Medium | Inside its ward with an OSM/Google name match 1–3.5 km away, **or** a replacement point found inside the ward |
 | Medium (stand-in) | No usable point: the centre of the facility's HFR village is used (it is in the right village, though not on the building) |
-| Low | No name match within 3.5 km, outside its ward or council, a ward or council centre used as a stand-in, or unusable point |
+| Low | No name match within 3.5 km, outside its ward or council, or unusable point |
 
 The distances are `MATCH_DISTANCE_M` (1 km), `MEDIUM_DISTANCE_M` (3.5 km) and `SEARCH_RADIUS_M` in `src/lib/geo/name-match.ts`.
 
@@ -62,17 +62,23 @@ During validation, which every run does, the corrected point is chosen like this
    village file is out of date, by its name inside the council (`pickVillageInCouncil`). `npx tsx scripts/backfill-village-centres.ts`
    moves ward and council stand-ins onto a village centre without calling any geocoder.
 
+Geocoder results are ranked by the geocoder's own score before the village test. Each provider's score is put on a 0 to 100 scale
+(ArcGIS `score`, MapTiler `relevance`, Google's location type: rooftop 100, interpolated 85, geometric centre 60, approximate 40;
+Nominatim gives none, so its own order is kept). Within a provider the best-scored candidate that is inside the ward, council and
+village wins; scores are not compared between providers. The winning score is stored in `geo_validation.geocode_score` and shown on the
+facility page and in the exports. It does not change the grade.
+
 Placements made by this rule are flagged **Placed in its village**, and management gets one email per run listing them
 (sent to the approval-email recipients). HFR coordinates are never overwritten.
 
 ### Climate-sensitive services (El Niño app)
 
 A separate way of reading the same data: which facilities offer services that matter for El Niño rains and flooding. The catalogue
-(`src/lib/climate/catalogue.ts`) holds 69 real HFR services in five priority tiers. Each is a service exactly as the portal files it
+(`src/lib/climate/catalogue.ts`) holds 34 real HFR services in five priority tiers (tiers 1 and 2 are a fixed list set by the team: 7 direct and 6 maternal services; 11, 5 and 5 sit in tiers 3 to 5). Each is a service exactly as the portal files it
 (its own category and name, unchanged; the portal's misfiled categories and spelling mistakes are kept and noted), with the Kiswahili for
 both, a short English and Kiswahili description and a climate-health rationale. The list comes from the team's brainstorm document and
 dataset prompt: services the brainstorm names are marked `draft`, services found in the registry that it did not name are marked `added`
-for the team to review. `code` (CS001, CS002, ...) is a catalogue id; the portal gives services no codes. All 342 service names and 44
+for the team to review. `code` (CS006, CS042, ...) is a catalogue id; the portal gives services no codes, and the codes are not consecutive because earlier tier 1 and 2 entries were removed (migration `0012`). All 342 service names and 44
 categories the portal uses are translated in `src/lib/climate/translations.ts` (and stored in `service_translations`); the ones a
 native-speaker health reviewer should check are listed in `NEEDS_REVIEW`.
 
@@ -89,21 +95,21 @@ native-speaker health reviewer should check are listed in `NEEDS_REVIEW`.
 ### Public API for the app
 
 An open, read-only JSON API for the El Niño app lives at `/api/v1/climate`. It needs no sign-in and serves only cleaned data: facilities
-that are operating, have a location and offer at least one climate-sensitive service (about 12,900), with their phone numbers and their
+that are operating, have a location and offer at least one climate-sensitive service (about 11,000), with their phone numbers and their
 services in English or Kiswahili (`lang=en|sw`). Service names and categories are the portal's own. Internal fields (review notes, flags, the portal's raw coordinates) are never returned,
 and a stand-in or unconfirmed point is marked `location.approximate`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/v1/climate/facilities` | A page of facilities. Filters: `service` (codes such as CS020), `tier` (1 to 5), `region`, `council`, `q` (name), `lat` + `lng` + `radius_km` (nearest first), `min_confidence`, `limit` (up to 200), `offset` |
+| `GET /api/v1/climate/facilities` | A page of facilities. Filters: `service` (codes such as CS019), `tier` (1 to 5), `region`, `council`, `q` (name), `lat` + `lng` + `radius_km` (nearest first), `min_confidence`, `limit` (up to 200), `offset` |
 | `GET /api/v1/climate/facilities/{code}` | One facility |
 | `GET /api/v1/climate/services` | The services with names, descriptions, tiers and facility counts |
 | `GET /api/v1/climate/regions` | Regions with counts; `?region=CODE` gives that region's councils |
 | `GET /api/v1/climate/openapi.json` | The OpenAPI 3 description, for app developers and API tools |
 
 ```bash
-# Facilities within 10 km of a point that do malaria rapid tests, with Kiswahili names
-curl "https://hfr-pipeline.vercel.app/api/v1/climate/facilities?lat=-6.8&lng=39.28&radius_km=10&service=MAL-MRDT&lang=sw"
+# Facilities within 10 km of a point that treat complicated malaria, with Kiswahili names
+curl "https://hfr-pipeline.vercel.app/api/v1/climate/facilities?lat=-6.8&lng=39.28&radius_km=10&service=CS019&lang=sw"
 ```
 
 Responses are cached by the CDN for 5 minutes (30 for services and regions), allow any origin (CORS), and are limited to about 120
@@ -173,10 +179,10 @@ npm run derive-wards            # add --replace to rebuild; never touches rows f
 
 **How the grade uses these layers.** Beyond the ward and name-match rules: a point outside its council polygon is low (a geocoded
 replacement inside the council makes it medium); a village polygon that matches the HFR village and ward raises the grade one step,
-while a village or geocoder placing the point in another ward lowers it one step (both: low); a point shared with another facility
+while a village or geocoder placing the point in another ward lowers it one step (both: low); a point whose HFR coordinates are shared with another facility
 is lowered one step; a name match needs at least one distinctive word in common, and a match on a very short name (`weak_name_match`)
-cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, medium) before the ward centre
-(`ward_centroid`, low) and the council centre (`council_centroid`, low).
+cannot reach high. Facilities with no usable point get the centre of their HFR village (`village_centroid`, medium) and nothing else: there is no ward or
+council centre fallback, so a facility with no usable point and no identifiable village gets no point.
 
 ### Satellite check
 
@@ -194,6 +200,30 @@ check retries a few times and then stops until the next run. The answer is store
   Each run checks at most `SATELLITE_MAX_PER_RUN` points; a point is re-checked only if it has moved. It stops without error when the
   imagery cap is reached or Gemini has no credit, and picks up again on the next run.
 - **Pictures on the facility page** come through `/api/satellite` (sign-in required), so the imagery key stays on the server.
+
+### Shared points
+
+Two facilities cannot stand on exactly the same spot. After every full or weekly run (`finalize` phase) the pipeline compares the
+point it serves for each facility (the corrected point, which is the HFR point when that was kept), rounded to 6 decimals (about
+0.1 m), and stores the result on `geo_validation`:
+
+- `shared_count`: how many other facilities are on the same point (0 = not shared)
+- `shared_with`: their names and codes, `NAME (CODE); NAME (CODE)` (the first 10, then "and N more")
+- `shared_emailed_with`: what the team was last told, so each shared point is emailed once
+
+The data tables carry it as two columns: **`location_sharing`** (`shared`, `not shared` or `no location`) and
+**`shares_location_with`** (the names and codes of the others). They are in the registry export (CSV and GeoJSON), the validation CSV, the
+Facilities sheet of the climate dataset, the Data quality table and the facility page. Data quality has an issue filter,
+"Shares its point with another facility".
+
+**The flag to the team** is one email per run, listing each new shared point with the facilities on it, sent to the approval-email
+recipients (Admin → approvals; the same switch and list as the other data-quality emails). A facility is mentioned again only when the
+facilities it shares with change. Stand-in centres (a village, ward or council centre used because a facility had no point) are shared on
+purpose, so they are marked `shared` in the tables but are not listed in the email.
+
+This is separate from the older `shared_point` flag, which compares the HFR portal's own coordinates and lowers the grade one step.
+The new check does not change any grade. Run `npx tsx scripts/refresh-shared-locations.ts` after moving points by hand; otherwise it
+updates at the end of the next run.
 
 ### 4. Environment variables
 

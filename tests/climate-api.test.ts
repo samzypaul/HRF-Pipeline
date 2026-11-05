@@ -4,7 +4,7 @@ import { rateLimit } from "@/lib/climate/http";
 import { openApiSpec } from "@/lib/climate/openapi";
 import { climateServiceFor } from "@/lib/climate/catalogue";
 
-const MRDT = climateServiceFor("Malaria Diagnosis and Treatment", "mRDT - Rapid Diagnostic Tests")!.code;
+const MRDT = climateServiceFor("Malaria Diagnosis and Treatment", "Treatment of Complicated Malaria")!.code;
 const ANC = climateServiceFor("Reproductive and Child Health Care Services", "Antenatal Care")!.code;
 
 const parse = (qs: string) => parseFacilityQuery(new URLSearchParams(qs));
@@ -70,7 +70,7 @@ describe("public API: what is shown", () => {
     const en = facilityView(row, [ANC, MRDT], "en");
     expect(en.phone).toBe("+255784755558");
     expect(en.services.map((s) => s.code)).toEqual([MRDT, ANC]); // tier 1 before tier 2
-    expect(en.services[0].name).toBe("mRDT - Rapid Diagnostic Tests"); // the portal's own text
+    expect(en.services[0].name).toBe("Treatment of Complicated Malaria"); // the portal's own text
     expect(en.services[0].category).toBe("Malaria Diagnosis and Treatment");
     expect(facilityView(row, [ANC], "sw").services[0].name).toBe("Huduma za Kliniki ya Wajawazito");
     for (const hidden of ["confidence_score", "notes", "sanity_flags", "review_decision", "hfr_lat", "geocode_source", "region_code", "council_code"]) {
@@ -119,7 +119,7 @@ describe("public API: OpenAPI description", () => {
       "/api/v1/climate/services",
       "/api/v1/climate/regions",
     ]);
-    expect(JSON.stringify(spec)).toContain("CS001");
+    expect(JSON.stringify(spec)).toContain("CS006");
     expect(spec.servers[0].url).toBe("https://example.org");
   });
 });

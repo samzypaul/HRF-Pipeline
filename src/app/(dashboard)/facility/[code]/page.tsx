@@ -108,7 +108,13 @@ export default async function FacilityPage({ params }: { params: Promise<{ code:
               <div>
                 <dt className="text-xs text-muted">Corrected point</dt>
                 <dd className="tabular-nums">
-                  {g.final_lat != null ? `${g.final_lat}, ${g.final_lng}` : "none"} <span className="text-muted">({String(g.geocode_source ?? "—")})</span>
+                  {g.final_lat != null ? `${g.final_lat}, ${g.final_lng}` : "none"} <span className="text-muted">({String(g.geocode_source ?? "—")}{g.geocode_score != null ? `, geocoder score ${g.geocode_score}` : ""})</span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Shared point</dt>
+                <dd>
+                  {g.final_lat == null ? "no location" : Number(g.shared_count ?? 0) > 0 ? `shared with ${String(g.shared_with ?? "")}` : "not shared"}
                 </dd>
               </div>
               {g.boundary_village != null && (

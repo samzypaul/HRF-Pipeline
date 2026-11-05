@@ -42,7 +42,7 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
       )}
 
       <form id="bulk" action={bulkReviewAction} className="card mb-5 flex flex-wrap items-end gap-3 p-4 text-sm">
-        {(["region", "council", "confidence", "type", "q", "issue"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
+        {(["region", "council", "ward", "confidence", "type", "q", "issue"] as const).map((k) => (filters[k] ? <input key={k} type="hidden" name={k} value={filters[k]} /> : null))}
         <label className="flex flex-col gap-1.5 text-xs font-medium text-muted">
           Apply to several facilities at once
           <select className="input" name="decision" defaultValue="accept_corrected">
@@ -121,6 +121,16 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                       → {r.final_lat.toFixed(5)}, {r.final_lng?.toFixed(5)} ({r.geocode_source})
                     </div>
                   )}
+                  {r.final_lat != null && (
+                    <div className="mt-1">
+                      {Number(r.shared_count ?? 0) > 0 ? (
+                        <span className="badge badge-dot bg-medium/10 text-medium">shared point</span>
+                      ) : (
+                        <span className="text-muted">not shared</span>
+                      )}
+                    </div>
+                  )}
+                  {r.shared_with && <div className="mt-1 max-w-xs whitespace-normal text-muted">Same point as: {r.shared_with}</div>}
                   {r.final_lat != null && (
                     <a
                       className="link ml-1 text-xs"

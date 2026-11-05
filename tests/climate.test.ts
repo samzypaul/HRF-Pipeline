@@ -29,9 +29,19 @@ describe("climate service catalogue", () => {
       expect(SERVICE_SW[s.name], s.code).toBe(s.nameSw);
     }
     // not renamed: the portal's spelling mistakes and odd categories stay as they are
-    expect(code("Growth Monitoring / Nutrition Surveillance", "IMM-BASIC - Basic Immunization")).toBeDefined();
-    expect(code("Mental Health and Substance Abuse Services", "Pyscho-Social care and support")).toBeDefined();
+    expect(code("Mental Health and Substance Abuse Services", "Case detection, referral of cases")).toBeDefined();
+    expect(code("Growth Monitoring / Nutrition Surveillance", "Vaccination")).toBeDefined();
     expect(code("Oral Health Service (Dental Services)", "Surgical Intervetion")).toBeDefined();
+  });
+  it("holds exactly the team's 7 tier 1 and 6 tier 2 services", () => {
+    expect(SERVICES.filter((s) => s.tier === 1).map((s) => s.name).sort()).toEqual(
+      ["Case detection, referral of cases", "Dengue Haemorrhagic fever", "Emergency Care and Trauma", "Epidemiological Surveillance and Response",
+        "Mental Health Services", "Treatment of Complicated Malaria", "Vaccination"].sort(),
+    );
+    expect(SERVICES.filter((s) => s.tier === 2).map((s) => s.name).sort()).toEqual(
+      ["Antenatal Care", "BEmOC - Basic Emergency Obstetric Care", "CEmOC - Comprehensive Emergency Obstetric Care",
+        "Management of Hypertensive Pregnancies (Pre-eclampsia)", "Maternal and Newborn Care", "Postnatal Care"].sort(),
+    );
   });
   it("names the five tiers in both languages and uses every one", () => {
     for (const t of [1, 2, 3, 4, 5] as Tier[]) {
@@ -41,7 +51,7 @@ describe("climate service catalogue", () => {
     }
   });
   it("marks which services came from the draft and which were added", () => {
-    expect(classifyService("Malaria Diagnosis and Treatment", "mRDT - Rapid Diagnostic Tests")?.source).toBe("draft");
+    expect(classifyService("Health Promotion and Disease Prevention", "Epidemiological Surveillance and Response")?.source).toBe("draft");
     expect(classifyService("Laboratory Service-Serology", "Dengue Haemorrhagic fever")?.source).toBe("added");
     expect(SERVICES.filter((s) => s.source === "added").length).toBeGreaterThan(0);
     expect(UNMATCHED.length).toBeGreaterThan(0);
@@ -69,23 +79,25 @@ describe("translations cover every portal service", () => {
 describe("classifyService (real portal rows)", () => {
   it("matches the draft's direct services by their exact portal text", () => {
     expect(code("Health Promotion and Disease Prevention", "Epidemiological Surveillance and Response")).toBeDefined();
-    expect(code("Disease Surveillance", "Perform laboratory tests for presumptive diagnosis")).toBeDefined();
-    expect(code("Emergency Preparedness", "Basic Emergency Preparedness")).toBeDefined();
-    expect(code("Emergency Preparedness", "Comprehensive Emergency Preparedness")).toBeDefined();
-    expect(code("Malaria Diagnosis and Treatment", "Slide Microscopy")).toBeDefined();
-    expect(code("Malaria Diagnosis and Treatment", "First Line Treatment")).toBeDefined();
     expect(code("Malaria Diagnosis and Treatment", "Treatment of Complicated Malaria")).toBeDefined();
     expect(code("General Clinical Services", "Mental Health Services")).toBeDefined();
   });
+  it("no longer matches services that were taken out of tiers 1 and 2", () => {
+    expect(code("Disease Surveillance", "Perform laboratory tests for presumptive diagnosis")).toBeUndefined();
+    expect(code("Emergency Preparedness", "Basic Emergency Preparedness")).toBeUndefined();
+    expect(code("Malaria Diagnosis and Treatment", "Slide Microscopy")).toBeUndefined();
+    expect(code("Malaria Diagnosis and Treatment", "First Line Treatment")).toBeUndefined();
+    expect(code("Vaccination", "Nutritional Counseling")).toBeUndefined();
+    expect(code("Maternity home", "Post natal care")).toBeUndefined();
+    expect(code("Reproductive and Child Health Care Services", "Family Planning")).toBeUndefined();
+  });
   it("keeps a service filed under the wrong portal category exactly as filed", () => {
-    expect(classifyService("Vaccination", "Nutritional Counseling")?.category).toBe("Vaccination");
-    expect(classifyService("General Clinical Services", "Nutritional Counseling")?.category).toBe("General Clinical Services");
     expect(classifyService("Growth Monitoring / Nutrition Surveillance", "Vaccination")?.mappingNote).toMatch(/Growth Monitoring/);
   });
   it("is exact: the same name in another category, or a near miss, is not a match", () => {
-    expect(code("TB Diagnosis, Care and Treatment", "First Line Treatment")).toBeUndefined();
-    expect(code("Malaria Diagnosis and Treatment", "first line treatment")).toBeUndefined();
-    expect(climateServiceFor(" Malaria Diagnosis and Treatment ", " Slide Microscopy ")).toBeDefined(); // only surrounding spaces are ignored
+    expect(code("Vaccination", "Vaccination")).toBeUndefined();
+    expect(code("Reproductive and Child Health Care Services", "antenatal care")).toBeUndefined();
+    expect(climateServiceFor(" Reproductive and Child Health Care Services ", " Antenatal Care ")).toBeDefined(); // only surrounding spaces are ignored
   });
   it("includes the added services, marked as added", () => {
     for (const [c, n] of [

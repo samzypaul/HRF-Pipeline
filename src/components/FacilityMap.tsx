@@ -224,7 +224,7 @@ export default function FacilityMap({ query }: { query: string }) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
 
-    /** Card with the facility name, ward, council and region (plus the location details when `full`). */
+    /** Card with the facility name, type, village, ward, council and region (plus the location details when `full`). */
     const card = (p: Record<string, string>, full: boolean) => {
       const el = document.createElement("div");
       el.style.fontSize = "13px";
@@ -235,6 +235,7 @@ export default function FacilityMap({ query }: { query: string }) {
       title.style.color = "#0f6e5b";
       el.append(title);
       for (const [label, value] of [
+        ["Type", lookup("types", p.t)],
         ["Village", lookup("villages", p.v)],
         ["Ward", lookup("wards", p.w)],
         ["Council", lookup("councils", p.cn)],
@@ -246,7 +247,7 @@ export default function FacilityMap({ query }: { query: string }) {
       }
       if (full) {
         const meta = document.createElement("div");
-        meta.textContent = `${p.code} · ${lookup("types", p.t) ?? ""} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
+        meta.textContent = `${p.code} · ${p.confidence} confidence · location from ${lookup("sources", p.s) ?? "hfr"}`;
         meta.style.color = "#5b6573";
         meta.style.marginTop = "4px";
         el.append(meta);

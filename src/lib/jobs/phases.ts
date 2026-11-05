@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 import { applyListDiff } from "../diff/apply";
 import { flagSharedPoints } from "../geo/validate";
+import { refreshSharedLocations } from "../geo/shared";
 import { matchWards } from "../geo/wards";
 import { notifyPendingCorrections } from "../notify/approvals";
 import { notifyVillagePlacements } from "../notify/villages";
+import { notifySharedLocations } from "../notify/shared";
 import { refreshClimateServices } from "../climate/refresh";
 import { env } from "../env";
 import { enqueue, failedTaskCount, getRun, mergeCounts, setRun, type RunKind, type RunRow } from "./queue";
@@ -246,6 +248,15 @@ async function seedPhase(run: RunRow, phase: string): Promise<number> {
       } catch (e) {
         console.error(`[run ${run.id}] village email failed`, e);
         await mergeCounts(run.id, { villageEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
+      }
+      // Which facilities share a point, stored for the data tables, and one email to the team about new ones. Never fails the run.
+      try {
+        await mergeCounts(run.id, { sharedLocations: await refreshSharedLocations() });
+        const s = await notifySharedLocations();
+        await mergeCounts(run.id, { sharedEmail: s.sent ? `sent (${s.groups} points, ${s.facilities} facilities)` : (s.reason ?? "not sent") });
+      } catch (e) {
+        console.error(`[run ${run.id}] shared location check failed`, e);
+        await mergeCounts(run.id, { sharedEmail: `failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
       }
       // Keep the climate-sensitive classification in step with the services just fetched. Never fails the run.
       try {
