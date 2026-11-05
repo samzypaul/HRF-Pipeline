@@ -99,6 +99,9 @@ export function whereFor(f: Filters): SQL {
     case "shared_point":
       parts.push(sql`'shared_point' = ANY(g.sanity_flags)`);
       break;
+    case "shared_after_geocoding":
+      parts.push(sql`'shared_after_geocoding' = ANY(g.sanity_flags)`);
+      break;
   }
   return sql.join(parts, sql` AND `);
 }
