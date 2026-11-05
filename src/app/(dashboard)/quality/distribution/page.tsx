@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { CONF_COLOR, CardHeader, Empty, PageHeader, Stat, StackedBar, fmt, pct } from "@/components/ui";
 import { q } from "@/lib/db/client";
 import { councilsOf, filterOptions, readFilters, type Filters } from "@/lib/data";
-import { DIMENSIONS, MAX_ROWS, gradeDistribution, isDimension, type DimensionKey, type DistributionRow } from "@/lib/quality-distribution";
+import { DIMENSIONS, MAX_ROWS, gradeDistribution, isDimension, sharingTotals, type DimensionKey, type DistributionRow } from "@/lib/quality-distribution";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +32,13 @@ export default async function DistributionPage({ searchParams }: { searchParams:
   const fallback: DimensionKey = filters.council || filters.ward ? "ward" : filters.region ? "council" : "region";
   const by: DimensionKey = isDimension(sp.by) && sp.by !== "type" ? sp.by : fallback;
 
-  const [{ regions, types }, councils, byType, byDim, names] = await Promise.all([
+  const [{ regions, types }, councils, byType, byDim, names, sharing] = await Promise.all([
     filterOptions(),
     filters.region ? councilsOf(filters.region) : Promise.resolve([]),
     gradeDistribution("type", filters),
     gradeDistribution(by, filters),
     q<{ code: string; name: string }>(sql`SELECT code, name FROM admin_units WHERE code = ANY(${sql.param([filters.region, filters.council, filters.ward].filter(Boolean) as string[])}::text[])`),
+    sharingTotals(filters),
   ]);
   const nameOf = (code?: string) => names.find((n) => n.code === code)?.name ?? code;
 
@@ -207,6 +208,16 @@ export default async function DistributionPage({ searchParams }: { searchParams:
         {GRADES.map((g) => (
           <Stat key={g.key} label={g.label} value={fmt(totals[g.key])} hint={`${pct(totals[g.key], totals.total)} of facilities`} />
         ))}
+      </div>
+
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="Same HFR coordinates" value={fmt(sharing.hfrShared)} hint={`${pct(sharing.hfrShared, totals.total)} of facilities · portal point shared, before geocoding`} />
+        <Stat label="Still sharing a point" value={fmt(sharing.afterGeocoding)} hint={`${pct(sharing.afterGeocoding, totals.total)} of facilities · after geocoding, hidden from the climate API`} />
+        <Stat label="Shared stand-in centre" value={fmt(sharing.standIn)} hint="village, ward or council centre used on purpose" />
+        <div className="flex items-center gap-3 text-sm">
+          <Link className="link" href={href("/quality", { ...scope, issue: "shared_point" })}>List same HFR coordinates</Link>
+          <Link className="link" href={href("/quality", { ...scope, issue: "shared_after_geocoding" })}>List still sharing</Link>
+        </div>
       </div>
 
       <section className="mb-8">
