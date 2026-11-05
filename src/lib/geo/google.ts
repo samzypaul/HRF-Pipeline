@@ -117,5 +117,9 @@ export async function googleGeocode(address: string, bbox?: BBox, fetchImpl: typ
     lat: r.geometry.location.lat,
     lng: r.geometry.location.lng,
     kind: r.geometry.location_type,
+    score: LOCATION_TYPE_SCORE[r.geometry.location_type],
   }));
 }
+
+/** Google gives how exact a result is, not a number. These stand in for one so Google results can be ranked against each other. */
+export const LOCATION_TYPE_SCORE: Record<string, number> = { ROOFTOP: 100, RANGE_INTERPOLATED: 85, GEOMETRIC_CENTER: 60, APPROXIMATE: 40 };

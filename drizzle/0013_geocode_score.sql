@@ -1,0 +1,1 @@
+ALTER TABLE "geo_validation" ADD COLUMN "geocode_score" smallint;

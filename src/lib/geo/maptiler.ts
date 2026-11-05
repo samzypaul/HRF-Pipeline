@@ -23,6 +23,8 @@ interface Feature {
   place_name?: string;
   place_type?: string[];
   center?: [number, number];
+  /** 0 to 1: how well the result matches the query */
+  relevance?: number;
   context?: Array<{ id?: string; text?: string }>;
 }
 
@@ -54,6 +56,7 @@ export async function maptilerSearch(query: string, opts: { bbox?: BBox; fetchIm
       lat: f.center![1],
       lng: f.center![0],
       kind: f.place_type?.[0],
+      score: typeof f.relevance === "number" && Number.isFinite(f.relevance) ? Math.round(Math.min(1, Math.max(0, f.relevance)) * 100) : undefined,
     }));
 }
 

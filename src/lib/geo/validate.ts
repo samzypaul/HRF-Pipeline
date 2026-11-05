@@ -8,7 +8,7 @@ import { overpassHealthPlaces, nominatimSearch, type BBox, type Place } from "./
 import { googleTextSearch, googleGeocode, GoogleUnavailable } from "./google";
 import { adjustGrade, grade, type CandidatePoint } from "./grade";
 import { combineWardChecks, wardNameCheck, type WardNameCheck } from "./maptiler";
-import { acrossProviders, forwardSearch, resolveProviders, reverseNames, type ActiveProvider } from "./provider";
+import { acrossProviders, byScoreDesc, forwardSearch, resolveProviders, reverseNames, type ActiveProvider } from "./provider";
 import { getSettings } from "../settings";
 import type { SatelliteStatus } from "./satellite";
 import { councilPolygon, pointInCouncilPolygon } from "./council";
@@ -460,10 +460,10 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         if (layers.nominatim && Date.now() >= nominatimPausedUntil) {
           try {
             const nom = await nominatimSearch(query, { viewbox: villageBox ?? ward?.bbox ?? council?.bbox });
-            for (const p of nom) {
+            for (const p of byScoreDesc(nom)) {
               const iw = await inWardOf(p.lat, p.lng);
               if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
-                geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
+                geocode = { source: "nominatim", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null, geoScore: p.score };
                 break;
               }
             }
@@ -485,10 +485,10 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           for (const { provider, error } of found.errors) console.warn(`[validate] ${provider} failed for ${f.facility_code}: ${errorMessage(error)}`);
           // The first provider (in priority order) with a point inside the ward and council wins.
           search: for (const { provider, value } of found.answers) {
-            for (const p of value) {
+            for (const p of byScoreDesc(value)) {
               const iw = await inWardOf(p.lat, p.lng);
               if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
-                geocode = { source: provider === "arcgis" ? "arcgis_geocode" : "maptiler_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
+                geocode = { source: provider === "arcgis" ? "arcgis_geocode" : "maptiler_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null, geoScore: p.score };
                 break search;
               }
             }
@@ -497,11 +497,11 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         if (!geocode && layers.googleGeocode && googleAvailable) {
           try {
             const res = await apiCall(() => googleGeocode(query, villageBox ?? ward?.bbox ?? council?.bbox));
-            for (const p of res) {
+            for (const p of byScoreDesc(res)) {
               if (p.kind === "APPROXIMATE" && !ward) continue;
               const iw = await inWardOf(p.lat, p.lng);
               if (iw !== false && !(await outsideCouncil(p.lat, p.lng)) && (await inVillageOk(p.lat, p.lng))) {
-                geocode = { source: "google_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null };
+                geocode = { source: "google_geocode", lat: p.lat, lng: p.lng, inWard: iw, inVillage: designated ? true : null, geoScore: p.score };
                 break;
               }
             }
@@ -605,14 +605,17 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
         flags.push("village_fix");
       }
 
+      // The geocoder's own confidence, kept only when the final point is the geocoded one.
+      const geocodeScore = geocode && result.geocodeSource === geocode.source ? (geocode.geoScore ?? null) : null;
+
       await q(sql`
         INSERT INTO geo_validation (facility_code, has_boundary, in_ward, in_council, distance_to_ward_m, sanity_flags,
           match_source, matched_name, name_score, match_distance_m, osm_id, google_place_id, google_checked_at, geocode_source,
-          final_lat, final_lng, confidence, notes, ward_name_check, ward_checked_at, ward_check_lat, ward_check_lng, village_check, boundary_village, boundary_village_ward, checked_at)
+          final_lat, final_lng, geocode_score, confidence, notes, ward_name_check, ward_checked_at, ward_check_lat, ward_check_lng, village_check, boundary_village, boundary_village_ward, checked_at)
         VALUES (${f.facility_code}, ${hasBoundary}, ${inWard}, ${inCouncil}, ${distanceToWardM},
           ${flags.length ? sql`ARRAY[${sql.join(flags.map((x) => sql`${x}`), sql`, `)}]::text[]` : sql`ARRAY[]::text[]`},
           ${matchSource}, ${matchedName}, ${nameScoreVal}, ${matchDistanceM}, ${osmId}, ${googlePlaceId}, ${googleCheckedNow ? sql`now()` : sql`NULL`}, ${result.geocodeSource},
-          ${result.final?.lat ?? null}, ${result.final?.lng ?? null}, ${result.confidence}, ${result.notes.join("; ")},
+          ${result.final?.lat ?? null}, ${result.final?.lng ?? null}, ${geocodeScore}, ${result.confidence}, ${result.notes.join("; ")},
           ${wardCheck}, ${wardCheckFresh ? sql`now()` : sql`NULL`}, ${wardCheckFresh ? result.final!.lat : null}, ${wardCheckFresh ? result.final!.lng : null},
           ${village?.check ?? null}, ${village?.village ?? null}, ${village?.ward ?? null}, now())
         ON CONFLICT (facility_code) DO UPDATE SET
@@ -621,7 +624,7 @@ export async function validateFacilities(codes: string[]): Promise<ValidateStats
           match_source = EXCLUDED.match_source, matched_name = EXCLUDED.matched_name, name_score = EXCLUDED.name_score,
           match_distance_m = EXCLUDED.match_distance_m, osm_id = EXCLUDED.osm_id, google_place_id = EXCLUDED.google_place_id,
           google_checked_at = coalesce(EXCLUDED.google_checked_at, geo_validation.google_checked_at),
-          geocode_source = EXCLUDED.geocode_source, final_lat = EXCLUDED.final_lat, final_lng = EXCLUDED.final_lng,
+          geocode_source = EXCLUDED.geocode_source, final_lat = EXCLUDED.final_lat, final_lng = EXCLUDED.final_lng, geocode_score = EXCLUDED.geocode_score,
           confidence = EXCLUDED.confidence, notes = EXCLUDED.notes,
           ward_name_check = EXCLUDED.ward_name_check,
           ward_checked_at = coalesce(EXCLUDED.ward_checked_at, geo_validation.ward_checked_at),

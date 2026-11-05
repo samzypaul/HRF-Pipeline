@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { q } from "@/lib/db/client";
 import { readFilters, whereFor } from "@/lib/data";
+import { SHARING_STATUS_SQL } from "@/lib/geo/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,6 +36,9 @@ const COLUMNS = [
   "match_source",
   "name_score",
   "geocode_source",
+  "geocode_score",
+  "location_sharing",
+  "shares_location_with",
   "boundary_village",
   "village_check",
   "final_lat",
@@ -67,6 +71,9 @@ const TABLES = {
       "match_source",
       "name_score",
       "geocode_source",
+  "geocode_score",
+  "location_sharing",
+  "shares_location_with",
       "boundary_village",
       "village_check",
       "final_lat",
@@ -76,7 +83,7 @@ const TABLES = {
       "notes",
     ],
     select: sql`SELECT f.facility_code, f.name, f.region_name, f.council_name, f.ward_name, f.hfr_lat, f.hfr_lng,
-        g.confidence, g.in_ward, g.distance_to_ward_m, g.match_source, g.name_score, g.geocode_source, g.boundary_village, g.village_check,
+        g.confidence, g.in_ward, g.distance_to_ward_m, g.match_source, g.name_score, g.geocode_source, g.geocode_score, ${SHARING_STATUS_SQL} AS location_sharing, g.shared_with AS shares_location_with, g.boundary_village, g.village_check,
         g.final_lat, g.final_lng, g.sanity_flags, r.decision AS review_decision, g.notes
       FROM facilities f
       JOIN geo_validation g ON g.facility_code = f.facility_code
@@ -135,7 +142,7 @@ export async function GET(req: Request) {
     SELECT f.facility_code, f.name, f.common_name, f.facility_type, f.operating_status, f.registration_status,
            f.ownership_category, f.ownership_authority, f.moh_authority, f.region_name, f.district_name, f.council_name,
            f.ward_name, f.village_name, f.region_code, f.council_code, f.ward_code, f.date_opened, f.phone, f.phone_e164, f.website, f.hfr_lat, f.hfr_lng,
-           g.confidence, g.in_ward, g.distance_to_ward_m, g.match_source, g.name_score, g.geocode_source, g.boundary_village, g.village_check,
+           g.confidence, g.in_ward, g.distance_to_ward_m, g.match_source, g.name_score, g.geocode_source, g.geocode_score, ${SHARING_STATUS_SQL} AS location_sharing, g.shared_with AS shares_location_with, g.boundary_village, g.village_check,
            g.final_lat, g.final_lng, g.sanity_flags, r.decision AS review_decision, g.notes,
            (SELECT count(*)::int FROM facility_services s WHERE s.facility_code = f.facility_code) AS services_count,
            (SELECT array_agg(s.category || ': ' || s.description ORDER BY s.category, s.description)

@@ -11,6 +11,8 @@ export interface Place {
   /** extra names (alt_name, name:sw, official_name) used for matching */
   altNames?: string[];
   kind?: string;
+  /** how sure the geocoder is of this result, 0 to 100 (ArcGIS score, MapTiler relevance, Google location type); undefined when the provider gives none */
+  score?: number;
 }
 
 export interface BBox {

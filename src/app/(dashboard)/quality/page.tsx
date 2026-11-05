@@ -122,6 +122,16 @@ export default async function QualityPage({ searchParams }: { searchParams: Prom
                     </div>
                   )}
                   {r.final_lat != null && (
+                    <div className="mt-1">
+                      {Number(r.shared_count ?? 0) > 0 ? (
+                        <span className="badge badge-dot bg-medium/10 text-medium">shared point</span>
+                      ) : (
+                        <span className="text-muted">not shared</span>
+                      )}
+                    </div>
+                  )}
+                  {r.shared_with && <div className="mt-1 max-w-xs whitespace-normal text-muted">Same point as: {r.shared_with}</div>}
+                  {r.final_lat != null && (
                     <a
                       className="link ml-1 text-xs"
                       target="_blank"

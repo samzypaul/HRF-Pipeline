@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { q } from "../db/client";
 import { readFilters, whereFor, type Filters } from "../data";
 import { SERVICES, SERVICE_BY_CODE, TIERS, UNMATCHED } from "./catalogue";
+import { SHARING_STATUS_SQL } from "../geo/shared";
 
 /**
  * The climate-sensitive facility dataset for the El Niño app, as sheets (one header row, snake_case columns, UTF-8 when saved as CSV):
@@ -75,7 +76,7 @@ export async function buildSheet(name: SheetName, p: DatasetParams): Promise<{ s
           columns: [
             "facility_code", "facility_name", "facility_type", "ownership_category", "ownership_authority", "region", "district", "council", "ward", "village",
             "latitude", "longitude", "location_source", "location_confidence", "hfr_latitude", "hfr_longitude", "phone", "operating_status",
-            "climate_service_count", "climate_services", "best_priority_tier",
+            "climate_service_count", "climate_services", "best_priority_tier", "location_sharing", "shares_location_with",
           ],
           rows: await q<Row>(sql`
             ${inSet},
@@ -86,7 +87,8 @@ export async function buildSheet(name: SheetName, p: DatasetParams): Promise<{ s
                    coalesce(g.final_lat, f.hfr_lat) AS latitude, coalesce(g.final_lng, f.hfr_lng) AS longitude,
                    coalesce(g.geocode_source, 'hfr') AS location_source, g.confidence AS location_confidence, f.hfr_lat AS hfr_latitude, f.hfr_lng AS hfr_longitude,
                    coalesce(f.phone_e164, f.phone) AS phone, f.operating_status,
-                   coalesce(agg.n, 0) AS climate_service_count, agg.codes AS climate_services, agg.best AS best_priority_tier
+                   coalesce(agg.n, 0) AS climate_service_count, agg.codes AS climate_services, agg.best AS best_priority_tier,
+                   ${SHARING_STATUS_SQL} AS location_sharing, g.shared_with AS shares_location_with
             FROM fac JOIN facilities f ON f.facility_code = fac.facility_code
             LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
             LEFT JOIN agg ON agg.facility_code = f.facility_code
