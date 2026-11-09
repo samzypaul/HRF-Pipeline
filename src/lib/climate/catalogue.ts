@@ -15,7 +15,7 @@
  * code: the portal gives services no codes of their own.
  * Entries marked `confidence: "review"` need a native-speaker health reviewer for the Kiswahili.
  *
- * Tiers 1 and 2 are a fixed list set by the team (Nov 2026): 7 direct services and 6 maternal services, nothing else. Earlier tier 1
+ * Tiers 1 and 2 are a fixed list set by the team (Nov 2026, revised 9 Nov): 7 direct services (Port Immunization added) and 3 maternal services, nothing else. Vaccination, Antenatal Care, BEmOC and Postnatal Care moved to tier 3 (Nov 2026). Earlier tier 1
  * and 2 entries (malaria tests, mental-health sub-services, nutrition, family planning and so on) were taken out; codes were not
  * renumbered, so CS001 to CS069 now have gaps. Migration 0012 cleans the database to match.
  */
@@ -80,7 +80,7 @@ export const SERVICES: ClimateService[] = [
   },
   {
     code: "CS013",
-    tier: 1,
+    tier: 3,
     category: "Growth Monitoring / Nutrition Surveillance",
     name: "Vaccination",
     categorySw: "Ufuatiliaji wa Ukuaji / Ufuatiliaji wa Hali ya Lishe",
@@ -145,8 +145,22 @@ export const SERVICES: ClimateService[] = [
     confidence: "high",
   },
   {
+    code: "CS070",
+    tier: 1,
+    category: "Growth Monitoring / Nutrition Surveillance",
+    name: "PORT - Port Immunization Services",
+    categorySw: "Ufuatiliaji wa Ukuaji / Ufuatiliaji wa Hali ya Lishe",
+    nameSw: "Huduma za Chanjo Bandarini na Mipakani (PORT)",
+    descEn: "Vaccination and health checks for travellers at ports and border crossings.",
+    descSw: "Chanjo na ukaguzi wa afya kwa wasafiri bandarini na mipakani.",
+    rationale: "Floods and displacement move people across borders and spread vaccine-preventable diseases, so port vaccination helps contain outbreaks.",
+    source: "added",
+    confidence: "high",
+    mappingNote: "Filed by the portal under 'Growth Monitoring / Nutrition Surveillance'.",
+  },
+  {
     code: "CS042",
-    tier: 2,
+    tier: 3,
     category: "Reproductive and Child Health Care Services",
     name: "Antenatal Care",
     categorySw: "Huduma za Afya ya Uzazi na Mtoto",
@@ -159,7 +173,7 @@ export const SERVICES: ClimateService[] = [
   },
   {
     code: "CS043",
-    tier: 2,
+    tier: 3,
     category: "Reproductive and Child Health Care Services",
     name: "BEmOC - Basic Emergency Obstetric Care",
     categorySw: "Huduma za Afya ya Uzazi na Mtoto",
@@ -211,7 +225,7 @@ export const SERVICES: ClimateService[] = [
   },
   {
     code: "CS048",
-    tier: 2,
+    tier: 3,
     category: "Reproductive and Child Health Care Services",
     name: "Postnatal Care",
     categorySw: "Huduma za Afya ya Uzazi na Mtoto",
