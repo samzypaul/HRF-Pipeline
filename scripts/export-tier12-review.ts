@@ -1,5 +1,5 @@
 /**
- * Two review workbooks for the tier 1 and 2 climate-sensitive services (the team's 13 named services):
+ * Two review workbooks for the tier 1 and 2 climate-sensitive services (the team's 11 named services):
  *   1. tier1-2-service-counts.xlsx          how many facilities offer each service, and the facility-level aggregate
  *   2. tier1-2-services-en-sw-review.xlsx   the services in English and Kiswahili, with blank columns for the reviewer
  *
@@ -64,12 +64,12 @@ async function counts() {
     const part = inScope.filter((s) => s.tier === t).map((s) => by.get(s.code));
     rows.push([t, "", `Tier ${t} subtotal (facility-service links, a facility counts once per service)`, "", part.reduce((a, r) => a + (r?.total ?? 0), 0), "", "", "", "", "", ""]);
   }
-  rows.push(["", "", "All 13 services: distinct facilities / total facility-service links", "", distinct.facilities, "", "", "", "", distinct.links, ""]);
+  rows.push(["", "", "All 11 services: distinct facilities / total facility-service links", "", distinct.facilities, "", "", "", "", distinct.links, ""]);
   sheet(wb, "Service counts", [
     { header: "tier", width: 6 }, { header: "code", width: 8 }, { header: "service", width: 48, wrap: true }, { header: "portal category", width: 34, wrap: true },
     { header: "facilities offering it", width: 14 }, { header: "of which hospitals", width: 12 }, { header: "of which other facilities", width: 14 },
     { header: "of which operating", width: 12 },
-    { header: "facilities that also offer another of the 13", width: 18 },
+    { header: "facilities that also offer another of the 11", width: 18 },
     { header: "aggregate: services offered by those shared facilities (sum)", width: 22 },
     { header: "facilities offering only this one", width: 16 },
   ], rows);
@@ -89,7 +89,7 @@ async function counts() {
   const distRows: Cell[][] = [...dist.entries()].sort((a, b) => a[0] - b[0]).map(([k, n]) => [k, n, k * n]);
   distRows.push(["Total", facilities.length, distRows.reduce((a, r) => a + Number(r[2]), 0)]);
   sheet(wb, "Aggregate by facility", [
-    { header: "number of the 13 services a facility offers", width: 22 }, { header: "facilities", width: 12 }, { header: "service links (services x facilities)", width: 20 },
+    { header: "number of the 11 services a facility offers", width: 22 }, { header: "facilities", width: 12 }, { header: "service links (services x facilities)", width: 20 },
   ], distRows);
 
   sheet(wb, "Facilities", [
