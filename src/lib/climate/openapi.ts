@@ -23,7 +23,7 @@ export function openApiSpec(origin: string) {
           parameters: [
             lang,
             { name: "service", in: "query", schema: { type: "string" }, description: `Comma-separated service codes; a facility must offer at least one. Codes look like CS006 and are not consecutive; see /services for the full list and what each one is.` },
-            { name: "tier", in: "query", schema: { type: "string" }, description: "Comma-separated priority tiers 1 to 5 (1 = direct climate-sensitive services)." },
+            { name: "tier", in: "query", schema: { type: "string" }, description: "Comma-separated priority tiers: 1 (direct climate-sensitive services), 2 (maternal and child health) or both." },
             { name: "region", in: "query", schema: { type: "string" }, description: "Region code from /regions, for example TZ.CL.DO." },
             { name: "council", in: "query", schema: { type: "string" }, description: "Council code from /regions?region=…" },
             { name: "q", in: "query", schema: { type: "string", maxLength: 80 }, description: "Part of the facility name." },
@@ -60,7 +60,7 @@ export function openApiSpec(origin: string) {
         Error: { type: "object", properties: { error: { type: "object", properties: { code: { type: "string" }, message: { type: "string" } } } } },
         Service: {
           type: "object",
-          properties: { code: { type: "string" }, name: { type: "string", description: "The service exactly as the HFR portal names it (or its Kiswahili name)." }, category: { type: "string", description: "The category the HFR portal files it under (or its Kiswahili name)." }, tier: { type: "integer", minimum: 1, maximum: 5 }, tier_name: { type: "string" } },
+          properties: { code: { type: "string" }, name: { type: "string", description: "The service exactly as the HFR portal names it (or its Kiswahili name)." }, category: { type: "string", description: "The category the HFR portal files it under (or its Kiswahili name)." }, tier: { type: "integer", minimum: 1, maximum: 2 }, tier_name: { type: "string" } },
         },
         Facility: {
           type: "object",
