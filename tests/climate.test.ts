@@ -33,10 +33,10 @@ describe("climate service catalogue", () => {
     expect(code("Growth Monitoring / Nutrition Surveillance", "Vaccination")).toBeDefined();
     expect(code("Oral Health Service (Dental Services)", "Surgical Intervetion")).toBeDefined();
   });
-  it("holds exactly the team's 8 tier 1 and 3 tier 2 services", () => {
+  it("holds exactly the team's 7 tier 1 and 3 tier 2 services", () => {
     expect(SERVICES.filter((s) => s.tier === 1).map((s) => s.name).sort()).toEqual(
       ["Case detection, referral of cases", "Dengue Haemorrhagic fever", "Emergency Care and Trauma", "Epidemiological Surveillance and Response",
-        "Mental Health Services", "PORT - Port Immunization Services", "Treatment of Complicated Malaria", "Vaccination"].sort(),
+        "Mental Health Services", "PORT - Port Immunization Services", "Treatment of Complicated Malaria"].sort(),
     );
     expect(SERVICES.filter((s) => s.tier === 2).map((s) => s.name).sort()).toEqual(
       ["CEmOC - Comprehensive Emergency Obstetric Care", "Management of Hypertensive Pregnancies (Pre-eclampsia)", "Maternal and Newborn Care"].sort(),
@@ -95,6 +95,7 @@ describe("classifyService (real portal rows)", () => {
     expect(classifyService(R, "Antenatal Care")?.tier).toBe(3);
     expect(classifyService(R, "BEmOC - Basic Emergency Obstetric Care")?.tier).toBe(3);
     expect(classifyService(R, "Postnatal Care")?.tier).toBe(3);
+    expect(classifyService("Growth Monitoring / Nutrition Surveillance", "Vaccination")?.tier).toBe(3);
     expect(classifyService("Growth Monitoring / Nutrition Surveillance", "PORT - Port Immunization Services")?.tier).toBe(1);
   });
   it("keeps a service filed under the wrong portal category exactly as filed", () => {

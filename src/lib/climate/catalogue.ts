@@ -15,7 +15,7 @@
  * code: the portal gives services no codes of their own.
  * Entries marked `confidence: "review"` need a native-speaker health reviewer for the Kiswahili.
  *
- * Tiers 1 and 2 are a fixed list set by the team (Nov 2026, revised 9 Nov): 8 direct services (Port Immunization added) and 3 maternal services, nothing else. Antenatal Care, BEmOC and Postnatal Care moved to tier 3 (Nov 2026). Earlier tier 1
+ * Tiers 1 and 2 are a fixed list set by the team (Nov 2026, revised 9 Nov): 7 direct services (Port Immunization added) and 3 maternal services, nothing else. Vaccination, Antenatal Care, BEmOC and Postnatal Care moved to tier 3 (Nov 2026). Earlier tier 1
  * and 2 entries (malaria tests, mental-health sub-services, nutrition, family planning and so on) were taken out; codes were not
  * renumbered, so CS001 to CS069 now have gaps. Migration 0012 cleans the database to match.
  */
@@ -80,7 +80,7 @@ export const SERVICES: ClimateService[] = [
   },
   {
     code: "CS013",
-    tier: 1,
+    tier: 3,
     category: "Growth Monitoring / Nutrition Surveillance",
     name: "Vaccination",
     categorySw: "Ufuatiliaji wa Ukuaji / Ufuatiliaji wa Hali ya Lishe",
