@@ -74,7 +74,7 @@ Placements made by this rule are flagged **Placed in its village**, and manageme
 ### Climate-sensitive services (El Niño app)
 
 A separate way of reading the same data: which facilities offer services that matter for El Niño rains and flooding. The catalogue
-(`src/lib/climate/catalogue.ts`) holds 34 real HFR services in five priority tiers (tiers 1 and 2 are a fixed list set by the team: 7 direct and 6 maternal services; 11, 5 and 5 sit in tiers 3 to 5). Each is a service exactly as the portal files it
+(`src/lib/climate/catalogue.ts`) holds 35 real HFR services in five priority tiers (tiers 1 and 2 are a fixed list set by the team: 7 direct and 3 maternal services; 15, 5 and 5 sit in tiers 3 to 5). Each is a service exactly as the portal files it
 (its own category and name, unchanged; the portal's misfiled categories and spelling mistakes are kept and noted), with the Kiswahili for
 both, a short English and Kiswahili description and a climate-health rationale. The list comes from the team's brainstorm document and
 dataset prompt: services the brainstorm names are marked `draft`, services found in the registry that it did not name are marked `added`
