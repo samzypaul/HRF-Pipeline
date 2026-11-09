@@ -6,6 +6,8 @@ export type Lang = "en" | "sw";
 
 export const DEFAULT_LIMIT = 50;
 export const MAX_LIMIT = 200;
+/** The public API exposes only the team's priority services, tiers 1 and 2. Tiers 3 to 5 stay in the catalogue but are never returned. */
+export const PUBLIC_MAX_TIER = 2;
 export const DEFAULT_RADIUS_KM = 25;
 export const MAX_RADIUS_KM = 200;
 
@@ -39,13 +41,13 @@ export function parseFacilityQuery(sp: URLSearchParams): Parsed<FacilityQuery> {
   if (!lang.ok) return lang;
 
   const services = list(sp.get("service")).map((c) => c.toUpperCase());
-  const unknown = services.filter((c) => !SERVICE_BY_CODE.has(c));
+  const unknown = services.filter((c) => (SERVICE_BY_CODE.get(c)?.tier ?? 99) > PUBLIC_MAX_TIER);
   if (unknown.length) return { ok: false, message: `Unknown service code(s): ${unknown.join(", ")}. See /api/v1/climate/services.` };
 
   const tiers: Tier[] = [];
   for (const t of list(sp.get("tier"))) {
     const n = Number(t);
-    if (!Number.isInteger(n) || n < 1 || n > 5) return { ok: false, message: "tier must be one or more of 1, 2, 3, 4, 5." };
+    if (!Number.isInteger(n) || n < 1 || n > PUBLIC_MAX_TIER) return { ok: false, message: "tier must be 1, 2 or both (1,2)." };
     tiers.push(n as Tier);
   }
 
@@ -91,7 +93,7 @@ export function parseFacilityQuery(sp: URLSearchParams): Parsed<FacilityQuery> {
  * Applies to every endpoint, so lists, single facilities and the counts agree.
  */
 const ELIGIBLE = sql`f.removed_at IS NULL AND f.operating_status ILIKE 'operating' AND coalesce(g.final_lat, f.hfr_lat) IS NOT NULL
-  AND EXISTS (SELECT 1 FROM facility_climate_services cs0 WHERE cs0.facility_code = f.facility_code)
+  AND EXISTS (SELECT 1 FROM facility_climate_services cs0 WHERE cs0.facility_code = f.facility_code AND cs0.tier <= 2)
   AND NOT ('shared_after_geocoding' = ANY(coalesce(g.sanity_flags, ARRAY[]::text[])))`;
 
 interface FacilityRow {
@@ -119,7 +121,7 @@ const localised = (lang: Lang, en: string, sw: string) => (lang === "sw" ? sw : 
 
 export function serviceView(code: string, lang: Lang) {
   const s = SERVICE_BY_CODE.get(code);
-  if (!s) return null;
+  if (!s || s.tier > PUBLIC_MAX_TIER) return null;
   return {
     code: s.code,
     name: localised(lang, s.name, s.nameSw),
@@ -168,7 +170,7 @@ async function servicesFor(codes: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>();
   if (codes.length === 0) return out;
   const rows = await q<{ facility_code: string; service_code: string }>(sql`
-    SELECT facility_code, service_code FROM facility_climate_services WHERE facility_code = ANY(${sql.param(codes)}::text[])`);
+    SELECT facility_code, service_code FROM facility_climate_services WHERE tier <= 2 AND facility_code = ANY(${sql.param(codes)}::text[])`);
   for (const r of rows) out.set(r.facility_code, [...(out.get(r.facility_code) ?? []), r.service_code]);
   return out;
 }
@@ -219,9 +221,9 @@ export async function listServices(lang: Lang) {
     SELECT cs.service_code, count(DISTINCT f.facility_code)::int AS n
     FROM facilities f LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
     JOIN facility_climate_services cs ON cs.facility_code = f.facility_code
-    WHERE ${ELIGIBLE} GROUP BY 1`);
+    WHERE ${ELIGIBLE} AND cs.tier <= 2 GROUP BY 1`);
   const n = new Map(counts.map((c) => [c.service_code, c.n]));
-  return SERVICES.map((s) => ({
+  return SERVICES.filter((s) => s.tier <= PUBLIC_MAX_TIER).map((s) => ({
     code: s.code,
     name: localised(lang, s.name, s.nameSw),
     description: localised(lang, s.descEn, s.descSw),

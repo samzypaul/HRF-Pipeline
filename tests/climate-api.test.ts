@@ -5,7 +5,8 @@ import { openApiSpec } from "@/lib/climate/openapi";
 import { climateServiceFor } from "@/lib/climate/catalogue";
 
 const MRDT = climateServiceFor("Malaria Diagnosis and Treatment", "Treatment of Complicated Malaria")!.code;
-const ANC = climateServiceFor("Reproductive and Child Health Care Services", "Antenatal Care")!.code;
+const ANC = climateServiceFor("Reproductive and Child Health Care Services", "CEmOC - Comprehensive Emergency Obstetric Care")!.code;
+const TIER3 = climateServiceFor("Reproductive and Child Health Care Services", "Antenatal Care")!.code;
 
 const parse = (qs: string) => parseFacilityQuery(new URLSearchParams(qs));
 
@@ -29,6 +30,8 @@ describe("public API: facility query", () => {
   it("rejects what it cannot understand instead of passing it on", () => {
     expect(parse("service=NOPE")).toMatchObject({ ok: false });
     expect(parse("tier=9")).toMatchObject({ ok: false });
+    expect(parse("tier=3")).toMatchObject({ ok: false });
+    expect(parse(`service=${TIER3}`)).toMatchObject({ ok: false });
     expect(parse("tier=one")).toMatchObject({ ok: false });
     expect(parse("region=Dar es Salaam")).toMatchObject({ ok: false });
     expect(parse("region=TZ.CL.DO;DROP")).toMatchObject({ ok: false });
@@ -72,7 +75,8 @@ describe("public API: what is shown", () => {
     expect(en.services.map((s) => s.code)).toEqual([MRDT, ANC]); // tier 1 before tier 2
     expect(en.services[0].name).toBe("Treatment of Complicated Malaria"); // the portal's own text
     expect(en.services[0].category).toBe("Malaria Diagnosis and Treatment");
-    expect(facilityView(row, [ANC], "sw").services[0].name).toBe("Huduma za Kliniki ya Wajawazito");
+    expect(facilityView(row, [ANC], "sw").services[0].name).toBe("Huduma za Dharura za Uzazi za Kina (CEmOC)");
+    expect(facilityView(row, [TIER3, MRDT], "en").services.map((s) => s.code)).toEqual([MRDT]); // tier 3 and below are never shown
     for (const hidden of ["confidence_score", "notes", "sanity_flags", "review_decision", "hfr_lat", "geocode_source", "region_code", "council_code"]) {
       expect(JSON.stringify(en)).not.toContain(`"${hidden}"`);
     }
