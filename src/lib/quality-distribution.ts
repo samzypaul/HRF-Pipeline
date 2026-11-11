@@ -70,3 +70,24 @@ export async function gradeDistribution(by: DimensionKey, filters: Filters): Pro
     LIMIT ${MAX_ROWS}`);
   return { rows, groups: rows[0]?.groups ?? 0 };
 }
+
+export interface SharingTotals {
+  /** Same HFR portal coordinates as another facility (`shared_point`, checked before geocoding). */
+  hfrShared: number;
+  /** Still on the same point as another facility after geocoding (`shared_after_geocoding`; hidden from the climate API). */
+  afterGeocoding: number;
+  /** On a shared point only because a village, ward or council centre was used as a stand-in. */
+  standIn: number;
+}
+
+/** How many of the facilities matching the filters share a point (confidence and issue are ignored). */
+export async function sharingTotals(filters: Filters): Promise<SharingTotals> {
+  const where: SQL = whereFor({ region: filters.region, council: filters.council, ward: filters.ward, type: filters.type });
+  const [r] = await q<{ hfr: number; after: number; stand: number }>(sql`
+    SELECT count(*) FILTER (WHERE 'shared_point' = ANY(g.sanity_flags))::int AS hfr,
+           count(*) FILTER (WHERE 'shared_after_geocoding' = ANY(g.sanity_flags))::int AS after,
+           count(*) FILTER (WHERE g.shared_count > 0 AND coalesce(g.geocode_source, '') IN ('village_centroid', 'ward_centroid', 'council_centroid'))::int AS stand
+    FROM facilities f LEFT JOIN geo_validation g ON g.facility_code = f.facility_code
+    WHERE ${where}`);
+  return { hfrShared: r?.hfr ?? 0, afterGeocoding: r?.after ?? 0, standIn: r?.stand ?? 0 };
+}
